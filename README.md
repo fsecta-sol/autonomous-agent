@@ -74,7 +74,7 @@ ln -s ~/autonomous-agent/skills/knowledge-curator ~/.hermes/skills/knowledge-cur
 
 # Bikin cron job pertama
 hermes cron create "*/30 * * * *" \
-  "Drain vault/00-Inbox/_knowledge/. If empty, output [SILENT]. Otherwise follow knowledge-curator skill." \
+  "Drain 00-Inbox/_knowledge/. If empty, output [SILENT]. Otherwise follow knowledge-curator skill." \
   --skill knowledge-curator \
   --workdir ~/vault \
   --name "process-inbox-knowledge"

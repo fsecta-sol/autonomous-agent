@@ -1,6 +1,6 @@
 ---
 name: knowledge-curator
-description: Process raw inputs (articles, tweets, questions, links) dropped into the vault inbox and integrate them into the personal crypto knowledge graph. Each input becomes (or enriches) one or more concept notes with mandatory vertical links across the crypto stack. Use this skill whenever `vault/00-Inbox/_knowledge/` is non-empty.
+description: Process raw inputs (articles, tweets, questions, links) dropped into the vault inbox and integrate them into the personal crypto knowledge graph. Each input becomes (or enriches) one or more concept notes with mandatory vertical links across the crypto stack. Use this skill whenever `00-Inbox/_knowledge/` is non-empty.
 ---
 
 # Knowledge Curator
@@ -13,7 +13,7 @@ A concept note is valuable only if it answers **"why"** — why does this mechan
 
 ## When to run
 
-You are activated when the inbox watcher cron fires and finds files in `vault/00-Inbox/_knowledge/`. Workdir is `vault/`. If the inbox is empty, output `[SILENT]` and exit. Do not invent work.
+You are activated when the inbox watcher cron fires and finds files in `00-Inbox/_knowledge/`. Workdir is `vault/`. If the inbox is empty, output `[SILENT]` and exit. Do not invent work.
 
 ## Vault layout (your working filesystem)
 
@@ -44,7 +44,7 @@ You do **not** write to `02-Projects/` (that is for the alpha scanner skill, not
 
 ## Workflow per run
 
-For each file in `vault/00-Inbox/_knowledge/`:
+For each file in `00-Inbox/_knowledge/`:
 
 1. **Read input.** Get full content. If URL, fetch the page text.
 2. **Identify input type** (see table above).
@@ -68,14 +68,14 @@ For each file in `vault/00-Inbox/_knowledge/`:
    - Read at least 2 sources from whitelist with web-fetch. Cite specific findings inline in `## Why` paragraphs.
    - If genuine canonical sources cannot be found (rare for crypto), mark `[NEEDS-SOURCE]` and flag.
 5. **For each concept, slug it** to lowercase-kebab-case (e.g., "Proof of Stake" → `proof-of-stake`).
-6. **Check if concept exists:** look for `vault/03-Areas/concepts/<slug>.md`.
+6. **Check if concept exists:** look for `03-Areas/concepts/<slug>.md`.
    - **If exists:** read it, then enrich (see "Enrichment rules" below). Do NOT overwrite. Do NOT duplicate existing content.
    - **If new:** create using the Concept Note Schema below.
 7. **Ensure vertical link.** Every concept must link to at least one concept in a different layer of the stack (see Layer Taxonomy). If you cannot identify a vertical link from the input alone, mark the note `[NEEDS-LINK]` and flag in daily log.
 8. **Generate diagram if mechanism warrants one** (see schema section `## Diagram`). Use Mermaid for flow/sequence/state; ASCII for simple stack. Skip only if truly nothing to visualize.
 9. **Include real-world examples for `market` and `applications` layer** (see schema section `## Real-world examples`). Required: named incident + date + quantified impact + source URL. Optional but recommended for other layers.
-10. **Move input file** to `vault/00-Inbox/_processed/YYYY-MM-DD/<original-filename>` after successful processing.
-11. **Append to daily log** at `vault/01-Daily/YYYY-MM-DD.md` (create if not exists) — see Daily Log Format below.
+10. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<original-filename>` after successful processing.
+11. **Append to daily log** at `01-Daily/YYYY-MM-DD.md` (create if not exists) — see Daily Log Format below.
 
 After all inputs processed: emit a brief summary (1 paragraph): N inputs processed, M new concepts, K enriched, list any `[NEEDS-*]` flags raised.
 
@@ -228,7 +228,7 @@ These flags are not failures — they're handoffs to the human curator (the user
 
 ## Daily log format
 
-Append to `vault/01-Daily/YYYY-MM-DD.md` (create if not exists). Use this section, append at end of file:
+Append to `01-Daily/YYYY-MM-DD.md` (create if not exists). Use this section, append at end of file:
 
 ```markdown
 ## Knowledge curation — <HH:MM run>
@@ -247,7 +247,7 @@ If nothing happened (inbox empty): do not append, output `[SILENT]`.
 
 ## Worked example
 
-**Input file**: `vault/00-Inbox/_knowledge/2026-05-30-paradigm-mev.md` containing a paragraph from a Paradigm blog post on MEV searcher economics.
+**Input file**: `00-Inbox/_knowledge/2026-05-30-paradigm-mev.md` containing a paragraph from a Paradigm blog post on MEV searcher economics.
 
 **Step 3 — Concept extraction**: `mev`, layer = `market`.
 
@@ -259,7 +259,7 @@ If nothing happened (inbox empty): do not append, output `[SILENT]`.
 
 Cite specific findings inline in `## Why`.
 
-**Step 6 — Check existing**: `vault/03-Areas/concepts/mev.md` does not exist → create.
+**Step 6 — Check existing**: `03-Areas/concepts/mev.md` does not exist → create.
 
 **Step 7 — Vertical link**: MEV builds on `[[mempool]]` (platforms layer) and `[[block-production]]` (foundations layer). Both in `Builds on`.
 
