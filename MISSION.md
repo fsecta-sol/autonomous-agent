@@ -163,8 +163,8 @@ Kalau ritme ini gak terjadi 2 minggu berturut-turut, **sistem dianggap unhealthy
 
 | Fase | Durasi target | Output | Status |
 |---|---|---|---|
-| **0** — Foundation | 1 minggu | MISSION+ARCH+TLDR final, vault skeleton, Syncthing nyala | 🟡 in progress |
-| **1** — Knowledge curator passive | 1-2 minggu | `process-inbox-knowledge` jalan, 10+ konsep di graph | ⚪ |
+| **0** — Foundation | 1 minggu | MISSION+ARCH+TLDR final, vault skeleton, Syncthing nyala, Obsidian-in-WSL siap, skill `knowledge-curator` pertama deployed | ✅ complete (2026-06-03) |
+| **1** — Knowledge curator passive | 1-2 minggu | `process-inbox-knowledge` jalan, 10+ konsep di graph | 🟡 in progress (1/10 — `mev.md`) |
 | **2** — Knowledge curator active | 1-2 minggu | `scan-curated-sources` jalan, sumber RSS+Twitter list dipilih | ⚪ |
 | **3** — Stabilize | 4 minggu | 50+ konsep, ritme harian terbentuk, graph view padat | ⚪ |
 | **4** — Alpha scanner | start setelah Fase 3 | Pilar B nyala dengan reasoning dari graph | ⚪ |
