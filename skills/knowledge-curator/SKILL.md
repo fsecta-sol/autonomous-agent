@@ -118,24 +118,50 @@ one concept in the layer below this one.>
 ## Diagram
 <Required when mechanism has: (a) sequential interaction between actors,
 (b) layered/stack relationship, (c) state transitions, (d) flow of value/data.
-Use Mermaid (Obsidian renders natively) for flow/sequence/state.
-Use ASCII for simple stacks.
 
-Mermaid types to use:
-- `sequenceDiagram` — actor-to-actor flow (MEV searcher → builder → block)
-- `flowchart TD` — state machine, decision flow (consensus voting)
-- `stateDiagram-v2` — state transitions (PoS validator lifecycle)
-- `graph LR` — relationships between concepts (rare; use wikilinks instead usually)
+**Default style: ASCII pipe-flow inside a plain fenced code block.**
+Reasons we prefer ASCII over Mermaid:
+- Renders identical width in any viewer (Obsidian, GitHub, plain CLI, AI tool)
+- Never clipped by container width or plugin issues
+- Diff-friendly when concept evolves
+- Reads fine in non-rendered markdown
 
-Skip ONLY if there is genuinely nothing to visualize (rare for crypto concepts).
-For abstract/economic concepts, prefer a table or ASCII illustration over no visual.>
+Use Mermaid ONLY when ASCII genuinely cannot express the structure
+(e.g., complex state machines with many transitions). When you do use
+Mermaid, prefer ≤4 actors and short labels to avoid horizontal overflow.
 
-```mermaid
-sequenceDiagram
-    participant A as Actor A
-    participant B as Actor B
-    A->>B: action
-    B-->>A: response
+ASCII conventions:
+- `|` vertical line for flow
+- `v` arrowhead at end of vertical line (or `^` for upward)
+- `--- text` for side annotations on a node
+- `->` or `-->` for short horizontal flows
+- Square brackets `[ ]` for terminal/end states
+- Keep each node on its own line, label flow between with `|`>
+
+```
+Actor A
+  |
+  | action
+  v
+Actor B          --- side annotation: what B does on receipt
+  |
+  | response
+  v
+Actor A
+```
+
+For stack/layer relationships (vertical hierarchy of concepts):
+
+```
++---------------------+
+|   Higher layer      |
++----------+----------+
+           |
+           | "built on"
+           v
++---------------------+
+|   Lower layer       |
++---------------------+
 ```
 
 ## Real-world examples
@@ -263,20 +289,25 @@ Cite specific findings inline in `## Why`.
 
 **Step 7 — Vertical link**: MEV builds on `[[mempool]]` (platforms layer) and `[[block-production]]` (foundations layer). Both in `Builds on`.
 
-**Step 8 — Diagram**: MEV has clear sequential flow (user submits → searcher observes → bids → builder includes). Include Mermaid sequenceDiagram:
+**Step 8 — Diagram**: MEV has clear sequential flow (user submits → searcher observes → bids → builder includes). Use ASCII pipe-flow:
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant M as Public Mempool
-    participant S as Searcher
-    participant B as Block Builder
-    U->>M: submit swap tx
-    M-->>S: tx visible (pending)
-    S->>S: simulate, find arb opportunity
-    S->>B: bundle (searcher tx + user tx) with bid
-    B->>B: include bundle if bid > others
-    Note over S,B: value extracted from user's swap
+```
+User
+  |
+  | submit swap tx
+  v
+Public Mempool
+  |
+  | tx visible (pending)
+  v
+Searcher          --- simulate, find arb opportunity
+  |
+  | bundle (searcher tx + user tx) + bid
+  v
+Block Builder     --- include bundle if bid > others
+  |
+  v
+[ block published ] — value extracted from user
 ```
 
 **Step 9 — Real-world examples** (required for market layer). Search rekt.news / EigenPhi / on-chain post-mortems:
