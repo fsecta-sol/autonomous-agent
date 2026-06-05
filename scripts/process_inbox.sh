@@ -1,33 +1,37 @@
 #!/bin/bash
-# process_inbox.sh — preflight wrapper for knowledge-curator cron
+# process_inbox.sh — pre-check / wake gate for knowledge-curator cron
 #
-# Runs every cron tick. Checks vault/00-Inbox/_knowledge/ for visible files.
-# - Empty inbox → exit 0 silently. No LLM call, zero token cost.
-# - Files present → invoke `hermes -z` one-shot with knowledge-curator skill.
+# Pattern: Hermes "wake gate" — if last stdout line is {"wakeAgent": false},
+# the LLM is SKIPPED entirely for that cron tick. Otherwise script output
+# is injected as context into the agent's prompt and the agent runs normally
+# (with the cron job's attached --skill knowledge-curator).
 #
-# Symlinked from ~/.hermes/scripts/process_inbox.sh
-# Invoked by cron job "process-inbox-knowledge" with --no-agent --script.
+# Cron config (NO --no-agent flag):
+#   hermes cron create "*/30 * * * *" \
+#     --script process_inbox.sh \
+#     --skill knowledge-curator \
+#     --workdir ~/vault \
+#     "Process all files in 00-Inbox/_knowledge/ following the
+#      knowledge-curator skill. Summarize what was done."
+#
+# Symlinked from ~/.hermes/scripts/process_inbox.sh via thin wrapper.
 
 set -euo pipefail
 
 VAULT="${HERMES_VAULT:-/home/hermes/vault}"
 INBOX="$VAULT/00-Inbox/_knowledge"
-HERMES_VENV="${HERMES_VENV:-/home/hermes/.hermes/hermes-agent/venv}"
 
-# Preflight: count visible (non-hidden) files in inbox.
-# Filters out .stfolder, .stignore, .DS_Store, etc.
+# Count visible (non-hidden) files. Filters .stfolder, .DS_Store, etc.
 COUNT=$(find "$INBOX" -maxdepth 1 -type f ! -name ".*" 2>/dev/null | wc -l)
 
 if [ "$COUNT" -eq 0 ]; then
-  # Silent exit — no LLM call, no delivery, no log entry beyond cron tick.
+  # Empty inbox → wake gate skips the LLM. Zero token cost.
+  echo '{"wakeAgent": false}'
   exit 0
 fi
 
-# Inbox has visible files → invoke agent one-shot.
-# shellcheck disable=SC1091
-source "$HERMES_VENV/bin/activate"
-cd "$VAULT"
-
-exec hermes -z "Drain 00-Inbox/_knowledge/. Follow the knowledge-curator skill exactly. After done, summarize counts (N inputs processed, M new concepts, K enriched) and list any [NEEDS-*] flags raised." \
-  --skills knowledge-curator \
-  --yolo
+# Has files — emit a brief context line that gets prepended to the agent's
+# prompt. The agent's main prompt (from the cron job's positional argument)
+# directs it to follow the knowledge-curator skill.
+FILES=$(find "$INBOX" -maxdepth 1 -type f ! -name ".*" -printf "%f\n" 2>/dev/null | tr '\n' ', ' | sed 's/, $//')
+echo "Inbox state: $COUNT file(s) pending — $FILES"

@@ -1,29 +1,40 @@
-# Setup cron jobs — preflight + agent pattern
+# Setup cron jobs — wake gate pre-check pattern
 
-Tutorial untuk kedua cron job di sistem ini (`process-inbox-knowledge` dan `graph-walker`), pakai pola **preflight script wrapper**: cron tick jalankan shell script ringan dulu, LLM cuma dipanggil kalau ada kerjaan beneran.
+Tutorial untuk kedua cron job di sistem ini (`process-inbox-knowledge` dan `graph-walker`), pakai **Hermes wake gate pattern**: cron tick jalankan shell script ringan, agent (LLM) cuma di-invoke kalau script tidak emit `{"wakeAgent": false}` sebagai line terakhir.
 
-**Kenapa pattern ini:** cron tick reguler tanpa preflight bakar ~20K input tokens per tick walau gak ada kerjaan (skill content selalu loaded). Pada interval `*/30 * * * *` = 48 tick/hari = jika setengahnya idle = **~480K tokens dibakar untuk nge-ngomong [SILENT]**. Preflight pattern bikin tick idle = bash exit 0 = **zero tokens**.
+**Kenapa pattern ini:** cron tick reguler tanpa preflight bakar ~20K input tokens per tick walau gak ada kerjaan (skill content selalu loaded). Pada interval `*/30 * * * *` = 48 tick/hari = jika setengahnya idle = **~480K tokens dibakar untuk nge-ngomong [SILENT]**. Wake gate bikin tick idle = bash exit + `wakeAgent: false` = **zero tokens** (LLM skip total).
 
 ---
 
-## Bagaimana pattern-nya bekerja
+## Wake gate pattern (built-in Hermes)
+
+Hermes' cron scheduler eksekusi `--script` dulu, baca stdout-nya. Kalau **line terakhir** stdout adalah JSON `{"wakeAgent": false}`, agent diskip dan tick berakhir tanpa LLM call.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Cron tick                                                    │
-│  (--no-agent --script <script>.sh)                          │
+│  (--script <script>.sh --skill knowledge-curator)            │
 │                                                              │
 │  ┌──────────────────────────────────────────────┐           │
 │  │ <script>.sh                                  │           │
 │  │  - cek kondisi (inbox / dangling refs)       │           │
-│  │  - kosong? → exit 0  (NO LLM)                │           │
-│  │  - ada? → exec hermes -z --skills knowledge- │           │
-│  │           curator                            │           │
-│  └──────────────────────────────────────────────┘           │
+│  │  - kosong? → echo '{"wakeAgent": false}'     │           │
+│  │  - ada?    → echo "Status: <count> pending"  │           │
+│  └─────────────────┬────────────────────────────┘           │
+│                    │                                         │
+│   Hermes parse last line of stdout                          │
+│                    │                                         │
+│        ┌───────────┴───────────┐                            │
+│        │                       │                            │
+│  {"wakeAgent": false}     anything else                     │
+│        │                       │                            │
+│        ▼                       ▼                            │
+│  SKIP agent              Invoke agent normally              │
+│  (zero tokens)           (script stdout injected to prompt) │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Cron job sendiri pakai `--no-agent`, jadi cron tick **tidak invoke LLM**. LLM cuma dipanggil oleh script via `hermes -z` (one-shot mode) kalau kondisi terpenuhi.
+**Catatan**: cron job TIDAK pakai `--no-agent` flag. Skill di-attach lewat `--skill knowledge-curator`. Cron prompt jadi main instruction agent. Script stdout (non-gate output) ke-prepend ke prompt sebagai context.
 
 ---
 
@@ -86,29 +97,33 @@ hermes cron delete <process-inbox-job-id>
 hermes cron delete <graph-walker-job-id>
 ```
 
-### 2. Bikin process-inbox-knowledge dengan preflight
+### 2. Bikin process-inbox-knowledge dengan wake gate
 
 ```bash
 hermes cron create "*/30 * * * *" \
-  --no-agent \
   --script process_inbox.sh \
+  --skill knowledge-curator \
   --workdir ~/vault \
   --deliver telegram \
-  --name "process-inbox-knowledge"
+  --name "process-inbox-knowledge" \
+  "Process all files currently in 00-Inbox/_knowledge/ following the knowledge-curator skill exactly. After done, summarize counts (N inputs processed, M new concepts, K enriched) and list any [NEEDS-*] flags raised."
 ```
 
-Catatan: `--workdir` tetap diset karena script ngambil $VAULT default, plus jadi cwd default kalau script salah. `--deliver telegram` bikin hermes -z output di-forward ke channel telegram.
+**Tidak ada `--no-agent`**. Skill di-attach via `--skill`, cron prompt jadi instruction utama agent. Script `process_inbox.sh` jalan dulu sebagai pre-check; output stdout-nya ke-inject sebagai context (di-prepend) ke prompt.
 
-### 3. Bikin graph-walker dengan preflight
+### 3. Bikin graph-walker dengan wake gate
 
 ```bash
 hermes cron create "0 */6 * * *" \
-  --no-agent \
   --script graph_walker.sh \
+  --skill knowledge-curator \
   --workdir ~/vault \
   --deliver telegram \
-  --name "graph-walker"
+  --name "graph-walker" \
+  "You are running a graph-walk task. The pre-check script has already listed dangling refs in the context above. Pick the deepest one (closest to cryptography layer based on context in source notes); tie-break by most-referenced. Process it by following the knowledge-curator skill workflow — fetch canonical sources, write full concept note with Diagram + Real-world examples sections, run reciprocity check, populate inbound link reciprocals. Append to today's daily log under '## Graph walk — <HH:MM>'."
 ```
+
+Script `graph_walker.sh` pre-extract dangling ref list, agent terima list langsung sebagai context — gak perlu ulang discovery sendiri.
 
 ### 4. Verify
 
@@ -124,8 +139,8 @@ hermes cron list
 ### process_inbox.sh
 
 1. `find ~/vault/00-Inbox/_knowledge -maxdepth 1 -type f ! -name ".*"` — count visible files
-2. Count = 0 → `exit 0` (Hermes record silent tick, no delivery, no LLM)
-3. Count > 0 → `source venv && exec hermes -z "<drain prompt>" --skills knowledge-curator --yolo`
+2. Count = 0 → output `{"wakeAgent": false}` → Hermes skip agent (no LLM call)
+3. Count > 0 → output "Inbox state: N file(s) pending — file1, file2" → agent invoked with this context prepended to cron prompt
 
 **Edge case handled:** filter hidden files (`.stfolder`, `.stignore`, `.DS_Store`) dari Syncthing dan macOS biar tidak salah-trigger.
 
@@ -135,8 +150,8 @@ hermes cron list
 2. `sed` strip `[[ ]]` wrapper dan `|alias` suffix
 3. Untuk tiap unique slug, cek apakah `concepts/<slug>.md` exists
 4. Hitung yang non-existent (dangling)
-5. 0 dangling → `exit 0` (graph "complete", no walk)
-6. ≥1 dangling → invoke agent dengan walk prompt
+5. 0 dangling → output `{"wakeAgent": false}` → agent skip
+6. ≥1 dangling → output "Dangling concept refs detected: <list>" → agent invoked, picks deepest from list
 
 **Edge case:** kalau concepts/ kosong (graph baru), grep return empty, dangling count = 0 → no walk. Skill akan idle sampai user drop input pertama via inbox.
 
@@ -144,45 +159,52 @@ hermes cron list
 
 ## Testing
 
-### Test process-inbox preflight (cheap path)
+### Test pre-check script langsung
 
 ```bash
-# 1. Pastiin inbox kosong
-ls ~/vault/00-Inbox/_knowledge/   # harus kosong (kecuali .stfolder)
+# Inbox kosong → harus output wake gate JSON
+ls ~/vault/00-Inbox/_knowledge/
+bash ~/.hermes/scripts/process_inbox.sh
+# Expected output: {"wakeAgent": false}
 
-# 2. Trigger cron manually
+# Inbox ada isi → harus output status (non-gate)
+echo "test" > ~/vault/00-Inbox/_knowledge/test.md
+bash ~/.hermes/scripts/process_inbox.sh
+# Expected output: Inbox state: 1 file(s) pending — test.md
+```
+
+### Test cron tick (cheap path)
+
+```bash
+# Pastiin inbox kosong
+rm -f ~/vault/00-Inbox/_knowledge/test.md
+
 source ~/.hermes/hermes-agent/venv/bin/activate
-hermes cron tick   # process semua due jobs sekali
+hermes cron run process-inbox-knowledge
 
-# 3. Cek: process_inbox harus exit 0 tanpa LLM call
-tail -20 ~/.hermes/logs/agent.log
-# Tidak boleh ada entri "API call" untuk job process-inbox-knowledge
+# Cek log: harus tampak "wake gate" decision, tidak ada API call entry
+tail -30 ~/.hermes/logs/agent.log | grep -iE "wake|silent|API call|knowledge-curator"
 ```
 
-### Test process-inbox happy path (LLM jalan)
+### Test cron tick (happy path)
 
 ```bash
-# 1. Drop test input
-echo "Test input." > ~/vault/00-Inbox/_knowledge/test.md
+echo "Test input about MEV." > ~/vault/00-Inbox/_knowledge/test.md
+hermes cron run process-inbox-knowledge
 
-# 2. Trigger
-hermes cron tick
-
-# 3. Cek: hermes -z spawned, agent processed
-tail -50 ~/.hermes/logs/agent.log | grep -E "API call|knowledge-curator"
-
-# 4. Cek output
-ls ~/vault/03-Areas/concepts/   # concept baru harus muncul
+# Tunggu beberapa menit (agent processing bisa 60-180s)
+# Cek output
+ls ~/vault/03-Areas/concepts/   # concept baru harus muncul atau enrichment
+cat ~/vault/01-Daily/$(date +%Y-%m-%d).md  # daily log entry
 ```
 
-### Test graph-walker preflight
+### Test graph_walker pre-check
 
 ```bash
-# Kalau concepts/ ada beberapa file dengan wikilinks dangling:
 bash ~/.hermes/scripts/graph_walker.sh
 echo "exit code: $?"
-# Kalau ada dangling: hermes -z trigger, full output muncul
-# Kalau gak ada: silent, exit 0
+# Kalau ada dangling refs: output list, exit 0
+# Kalau gak ada: {"wakeAgent": false}, exit 0
 ```
 
 ---
@@ -200,7 +222,7 @@ grep "\[SILENT\]" ~/.hermes/logs/agent.log | grep -oE "^[0-9]{4}-[0-9]{2}-[0-9]{
 grep "cron_<job-id>" ~/.hermes/logs/agent.log | grep "API call" | wc -l
 ```
 
-### Rollback ke pola lama (kalau preflight bermasalah)
+### Rollback ke pola lama (no script, prompt-only)
 
 ```bash
 hermes cron delete process-inbox-knowledge
@@ -211,21 +233,26 @@ hermes cron create "*/30 * * * *" \
   --name "process-inbox-knowledge"
 ```
 
-Sama untuk graph-walker (lihat git history `setup/graph-walker.md` deleted commit untuk command originalnya).
+Konsekuensi: tiap tick = LLM call (skill loaded), ~20K input tokens per tick walau gak ada kerjaan. Rollback ini cuma kalau wake gate script ada bug yang gak bisa di-debug cepat.
 
 ---
 
 ## Failure modes
 
-1. **Script path salah**: cron tick gagal, `last_status: "error"` di jobs.json. Cek `hermes cron list` dan `~/.hermes/logs/agent.log` untuk error script not found. Re-verify symlink.
+1. **Script path salah**: cron tick gagal, `last_status: "error"` di jobs.json. Cek `hermes cron list` dan `~/.hermes/logs/agent.log` untuk error script not found. Re-verify thin wrapper di `~/.hermes/scripts/`.
 
-2. **Venv path salah**: script run, source gagal, exit dengan error. Set `HERMES_VENV` env var atau edit script default.
+2. **Wake gate JSON di-parse salah**: script harus output `{"wakeAgent": false}` PERSIS di line terakhir stdout (no trailing whitespace/newlines after). Hermes parse line terakhir non-empty. Kalau script print apa-apa setelah JSON, gate gagal trigger, agent invoked anyway.
 
-3. **Hermes -z command not found di venv**: kemungkinan venv broken. Re-install Hermes atau cek `which hermes` dengan venv activated.
+3. **Agent timeout setelah wake gate fire**: agent run normal (60-300s tergantung kerjaan). Bukan limited oleh 120s script timeout — itu hanya untuk pre-check script execution. Agent timeout ada di `agent.gateway_timeout: 1800` (30 min).
 
-4. **Cron tick infinite loop kalau hermes -z error**: tidak akan infinite — hermes -z gagal → exec replace shell → cron job marked error → next tick fresh. Aman.
+4. **Script timeout limit (120s default)**: kalau script lu sendiri butuh > 120s untuk pre-check (mis. grep besar di vault gede), naikkan dengan tambahan di `~/.hermes/config.yaml`:
+   ```yaml
+   cron:
+     script_timeout_seconds: 300
+   ```
+   Atau set env var `HERMES_CRON_SCRIPT_TIMEOUT=300` di systemd unit Hermes.
 
-5. **Script edit conflict via Syncthing**: scripts di-symlink dari repo, BUKAN dari vault. Syncthing tidak menyentuh. Edit selalu via git → push → server pull.
+5. **Script edit conflict via Syncthing**: scripts di-symlink dari repo via thin wrapper, BUKAN dari vault. Syncthing tidak menyentuh. Edit selalu via git → push → server pull.
 
 ---
 
