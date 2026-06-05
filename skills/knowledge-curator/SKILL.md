@@ -13,12 +13,21 @@ A concept note is valuable only if it answers **"why"** — why does this mechan
 
 ## When to run
 
-You are activated when the inbox watcher cron fires and finds files in `00-Inbox/_knowledge/`. Workdir is `vault/`. If the inbox is empty, output `[SILENT]` and exit. Do not invent work.
+You are activated when the inbox watcher cron fires and finds files in `00-Inbox/_knowledge/`. 
+
+**Path convention (critical):** your working directory IS the vault root (e.g., `/home/hermes/vault/` on the server). All paths in this skill — `00-Inbox/`, `01-Daily/`, `03-Areas/concepts/`, etc. — are **relative to workdir**. Do NOT prepend `vault/` to any path in tool calls. Tool call examples:
+
+- ✅ `search_files(path="00-Inbox/_knowledge/")` 
+- ❌ `search_files(path="vault/00-Inbox/_knowledge/")` (this resolves to `<workdir>/vault/00-Inbox/...` which does not exist)
+
+If the inbox is empty, output `[SILENT]` and exit. Do not invent work.
 
 ## Vault layout (your working filesystem)
 
+Diagram shows the tree starting AT your workdir (so `00-Inbox/` is at the top level of where you are):
+
 ```
-vault/
+<workdir, e.g. /home/hermes/vault>
 ├── 00-Inbox/
 │   ├── _knowledge/        ← YOUR INPUT (drain this)
 │   └── _processed/        ← move inputs here after processing
