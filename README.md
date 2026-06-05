@@ -23,6 +23,7 @@ Default sistem: **mati, dibangunkan cron berkala.** Stateless. Ingatan ada di di
 | [TLDR.md](TLDR.md) | Prinsip teknis dari Hermes Agent: stateless, cron amnesia, judge konservatif, fallback provider. |
 | [setup/sync-pipeline.md](setup/sync-pipeline.md) | Tutorial end-to-end pipeline: SSH topology, Syncthing pairing, share folder vault, Obsidian-in-WSL install + shortcut. |
 | [setup/cron-jobs.md](setup/cron-jobs.md) | Cron job setup dengan preflight pattern: shell wrapper cek kondisi dulu, LLM dipanggil hanya kalau ada kerjaan (saves ~480K tokens/hari di idle ticks). |
+| [setup/telegram.md](setup/telegram.md) | Telegram bot utilization: #digest (cron output delivery) + #inbox (paste dari HP → save ke `00-Inbox/`). Includes Cloudflare/Twitter scoping (text-paste strategy). |
 | [scripts/](scripts/) | Preflight scripts (`process_inbox.sh`, `graph_walker.sh`) yang di-symlink ke `~/.hermes/scripts/` di server. |
 | [skills/](skills/) | Procedural memory yang di-symlink ke `~/.hermes/skills/` di server. |
 
