@@ -99,14 +99,16 @@ hermes cron delete <graph-walker-job-id>
 
 ### 2. Bikin process-inbox-knowledge dengan wake gate
 
+**Penting argparse order**: prompt adalah positional argument, harus dikasih **langsung setelah schedule**, baru flags. Order: `cron create <schedule> <prompt> --flags...`. Kalau prompt ditaruh setelah flags, argparse ke-reject "unrecognized arguments".
+
 ```bash
 hermes cron create "*/30 * * * *" \
+  "Process all files currently in 00-Inbox/_knowledge/ following the knowledge-curator skill exactly. After done, summarize counts (N inputs processed, M new concepts, K enriched) and list any [NEEDS-*] flags raised." \
   --script process_inbox.sh \
   --skill knowledge-curator \
   --workdir ~/vault \
   --deliver telegram \
-  --name "process-inbox-knowledge" \
-  "Process all files currently in 00-Inbox/_knowledge/ following the knowledge-curator skill exactly. After done, summarize counts (N inputs processed, M new concepts, K enriched) and list any [NEEDS-*] flags raised."
+  --name "process-inbox-knowledge"
 ```
 
 **Tidak ada `--no-agent`**. Skill di-attach via `--skill`, cron prompt jadi instruction utama agent. Script `process_inbox.sh` jalan dulu sebagai pre-check; output stdout-nya ke-inject sebagai context (di-prepend) ke prompt.
@@ -115,12 +117,12 @@ hermes cron create "*/30 * * * *" \
 
 ```bash
 hermes cron create "0 */6 * * *" \
+  "You are running a graph-walk task. The pre-check script has already listed dangling refs in the context above. Pick the deepest one (closest to cryptography layer based on context in source notes); tie-break by most-referenced. Process it by following the knowledge-curator skill workflow — fetch canonical sources, write full concept note with Diagram + Real-world examples sections, run reciprocity check, populate inbound link reciprocals. Append to today's daily log under '## Graph walk — <HH:MM>'." \
   --script graph_walker.sh \
   --skill knowledge-curator \
   --workdir ~/vault \
   --deliver telegram \
-  --name "graph-walker" \
-  "You are running a graph-walk task. The pre-check script has already listed dangling refs in the context above. Pick the deepest one (closest to cryptography layer based on context in source notes); tie-break by most-referenced. Process it by following the knowledge-curator skill workflow — fetch canonical sources, write full concept note with Diagram + Real-world examples sections, run reciprocity check, populate inbound link reciprocals. Append to today's daily log under '## Graph walk — <HH:MM>'."
+  --name "graph-walker"
 ```
 
 Script `graph_walker.sh` pre-extract dangling ref list, agent terima list langsung sebagai context — gak perlu ulang discovery sendiri.
