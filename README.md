@@ -21,6 +21,8 @@ Default sistem: **mati, dibangunkan cron berkala.** Stateless. Ingatan ada di di
 | [MISSION.md](MISSION.md) | Kenapa project ini ada. North star, dua pilar, roadmap, success metrics, non-goals. **Dibaca pertama.** |
 | [ARCH.md](ARCH.md) | Blueprint fisik: topologi mesin, komponen, context assembly, memory layers, flow per run, deployment via git. |
 | [TLDR.md](TLDR.md) | Prinsip teknis dari Hermes Agent: stateless, cron amnesia, judge konservatif, fallback provider. |
+| [setup/sync-pipeline.md](setup/sync-pipeline.md) | Tutorial end-to-end pipeline: SSH topology, Syncthing pairing, share folder vault, Obsidian-in-WSL install + shortcut. |
+| [setup/graph-walker.md](setup/graph-walker.md) | Design + setup cron-2 untuk autonomous graph expansion (deepest-ancestor priority + reciprocity). |
 | [skills/](skills/) | Procedural memory yang di-symlink ke `~/.hermes/skills/` di server. |
 
 ---
@@ -54,9 +56,9 @@ Bridge antar rumah lewat symlink: `~/.hermes/skills/<name> -> ~/autonomous-agent
 
 | Fase | Output | Status |
 |---|---|---|
-| **0** — Foundation | Docs (MISSION/ARCH/TLDR), skill pertama, vault skeleton, Syncthing | 🟡 in progress |
-| **1** — Knowledge curator passive | `process-inbox-knowledge` cron jalan, 10+ konsep di graph | ⚪ |
-| **2** — Knowledge curator active | `scan-curated-sources` (RSS + Twitter list curated) | ⚪ |
+| **0** — Foundation | Docs (MISSION/ARCH/TLDR/README/setup), skill `knowledge-curator` deployed, vault skeleton, Syncthing aktif, Obsidian-in-WSL | ✅ complete (2026-06-03) |
+| **1** — Knowledge curator passive | `process-inbox-knowledge` cron jalan, 10+ konsep di graph, reciprocity verified | 🟡 in progress (2/10 — `mev`, `mempool`) |
+| **2** — Knowledge curator active | `scan-curated-sources` (RSS + Twitter list curated) + `graph-walker` cron | ⚪ |
 | **3** — Stabilize | 50+ konsep ter-link, ritme harian terbentuk | ⚪ |
 | **4** — Alpha scanner | Pilar B nyala dengan reasoning dari graph | ⚪ |
 
