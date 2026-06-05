@@ -22,7 +22,8 @@ Default sistem: **mati, dibangunkan cron berkala.** Stateless. Ingatan ada di di
 | [ARCH.md](ARCH.md) | Blueprint fisik: topologi mesin, komponen, context assembly, memory layers, flow per run, deployment via git. |
 | [TLDR.md](TLDR.md) | Prinsip teknis dari Hermes Agent: stateless, cron amnesia, judge konservatif, fallback provider. |
 | [setup/sync-pipeline.md](setup/sync-pipeline.md) | Tutorial end-to-end pipeline: SSH topology, Syncthing pairing, share folder vault, Obsidian-in-WSL install + shortcut. |
-| [setup/graph-walker.md](setup/graph-walker.md) | Design + setup cron-2 untuk autonomous graph expansion (deepest-ancestor priority + reciprocity). |
+| [setup/cron-jobs.md](setup/cron-jobs.md) | Cron job setup dengan preflight pattern: shell wrapper cek kondisi dulu, LLM dipanggil hanya kalau ada kerjaan (saves ~480K tokens/hari di idle ticks). |
+| [scripts/](scripts/) | Preflight scripts (`process_inbox.sh`, `graph_walker.sh`) yang di-symlink ke `~/.hermes/scripts/` di server. |
 | [skills/](skills/) | Procedural memory yang di-symlink ke `~/.hermes/skills/` di server. |
 
 ---
