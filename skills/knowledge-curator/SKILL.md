@@ -74,8 +74,9 @@ For each file in `00-Inbox/_knowledge/`:
 7. **Ensure vertical link.** Every concept must link to at least one concept in a different layer of the stack (see Layer Taxonomy). If you cannot identify a vertical link from the input alone, mark the note `[NEEDS-LINK]` and flag in daily log.
 8. **Generate diagram if mechanism warrants one** (see schema section `## Diagram`). Use Mermaid for flow/sequence/state; ASCII for simple stack. Skip only if truly nothing to visualize.
 9. **Include real-world examples for `market` and `applications` layer** (see schema section `## Real-world examples`). Required: named incident + date + quantified impact + source URL. Optional but recommended for other layers.
-10. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<original-filename>` after successful processing.
-11. **Append to daily log** at `01-Daily/YYYY-MM-DD.md` (create if not exists) — see Daily Log Format below.
+10. **Reciprocity check — MANDATORY for new concepts.** Before considering the note complete, scan vault for inbound wikilinks and populate reciprocal sections. See `## Reciprocity rules` below for procedure. A concept with outgoing wikilinks but empty incoming reciprocals is incomplete.
+11. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<original-filename>` after successful processing.
+12. **Append to daily log** at `01-Daily/YYYY-MM-DD.md` (create if not exists) — see Daily Log Format below.
 
 After all inputs processed: emit a brief summary (1 paragraph): N inputs processed, M new concepts, K enriched, list any `[NEEDS-*]` flags raised.
 
@@ -216,6 +217,7 @@ Choose exactly one layer per concept. If you cannot decide between two, the conc
 6. **External canonical sources MANDATORY.** `## Sources` must contain at least 1 URL from the whitelist in Workflow step 4 (Paradigm, Flashbots, vitalik.eth.limo, ethresear.ch, EIPs, original whitepapers, audit firms, on-chain analytics). `user-paste` alone is NOT enough. News media and influencer threads do not count as canonical. If genuine canonical source cannot be found, flag `[NEEDS-SOURCE]`.
 7. **Visualize when there's flow or structure.** If the mechanism involves sequential interaction between actors, layered architecture, state transitions, or value/data flow, include `## Diagram` (Mermaid preferred, ASCII for simple stacks). The diagram must be meaningful — not decorative. Reject reflexive empty `mermaid` blocks; if truly nothing to visualize, omit the section entirely rather than ship a hollow one.
 8. **Real-world examples REQUIRED for `market` and `applications` layer.** At least 1 named incident with date, quantified impact, and source URL. Abstract market-layer concepts without case studies are speculation. Use post-mortems (rekt.news, project incident reports), on-chain analytics (Dune dashboards, EigenPhi MEV explorer), or research-level case studies as sources.
+9. **Reciprocity mandatory.** Every wikilink from concept C to concept N must have a counterpart link from N back to C, in the section appropriate to their layer relationship (see `## Reciprocity rules`). A note is not complete until incoming reciprocals are populated. Forward-only references are temporary state during creation, never the final form.
 
 ## Enrichment rules (when concept already exists)
 
@@ -229,6 +231,73 @@ When the concept file already exists, your job is to **add** without duplicating
 
 If the input adds nothing new beyond what's already in the file, skip enrichment and just append to daily log: "input X re-confirmed [[concept]] — no enrichment needed."
 
+## Reciprocity rules (graph consistency)
+
+Every wikilink must have a reciprocal counterpart in the target note. The graph is meant to be navigable in both directions — from a market-layer concept down to its foundations, AND from a foundation concept up to everything it enables. This bidirectional connectivity is what makes the graph compound understanding rather than just collect facts.
+
+### Reciprocity procedure (run for every new concept C)
+
+After writing the body of new concept C but BEFORE moving the input file to `_processed/`:
+
+1. **Search vault for inbound wikilinks to C.**
+   - Grep all files in `03-Areas/concepts/*.md` for occurrences of `[[<C-slug>]]` or `[[<C-slug>|...]]` (the alias form)
+   - Collect the list of finder notes (concepts that reference C)
+
+2. **For each finder note N, classify which section the `[[C]]` appears in:**
+
+   | Section in N | Reciprocal section in C | Reasoning template |
+   |---|---|---|
+   | `## Builds on` | `## Enables` | "C enables N because..." |
+   | `## Enables` | `## Builds on` | "C builds on N because..." |
+   | `## Related (same layer)` | `## Related (same layer)` | symmetric: "alternative/variant/contrast to N" |
+   | Inline body text (not in structured section) | No required reciprocal, but note in `## Notes` if conceptually meaningful | "Referenced inline by [[N]]" |
+
+3. **Add reciprocal links to C with 1-sentence reasoning per link.** Reasoning is not optional — bare `[[N]]` without reason fails compound-understanding test. Reuse or invert the reasoning from N when possible.
+
+4. **Enrich finder N if needed.** Two cases when N should be updated:
+   - N's link `[[C]]` lacks a reasoning sentence → add reasoning now that C exists with full body
+   - C reveals a new perspective that retro-improves N's own `## Why` → append a "Reciprocal angle from [[C]]: ..." paragraph to N
+   - Mostly N just stays as-is — its forward ref was already complete
+
+### Same-layer reciprocity (sibling concepts)
+
+When C is created at layer L, scan existing concepts ALSO at layer L. If any are conceptually related (alternative, variant, complement, contrast), populate BOTH sides of `## Related`:
+
+- Add the sibling to C's `## Related (same layer)` with reasoning
+- Add C to the sibling's `## Related (same layer)` with reasoning
+
+Use the layer enum to filter — don't propose Related links across layers (those go in Builds on / Enables).
+
+### Worked reciprocity example
+
+State before graph walk:
+
+```
+mev.md exists with:
+  ## Builds on
+    - [[block-production]]
+    - [[mempool]]
+```
+
+Graph-walker creates `block-production.md`. During reciprocity check:
+
+1. Grep finds `mev.md` contains `[[block-production]]`
+2. Classify: `[[block-production]]` appears in mev's `## Builds on` section
+3. Reciprocal: add to `block-production.md`'s `## Enables`:
+   ```
+   ## Enables
+   - [[mev]] — MEV arises from the proposer's discretionary control over transaction ordering within a block slot
+   ```
+4. Check if mev.md needs enrichment: its existing line `- [[block-production]] — proposer discretion over block contents is the root cause` is already complete. No enrichment needed.
+
+After this, mev ↔ block-production is bidirectional. Same procedure runs for `[[mempool]]` reciprocal, same-layer sibling check for foundations concepts already present (e.g., `proof-of-stake`, `proof-of-work` if they exist).
+
+### When reciprocity check fails
+
+- **Finder note doesn't actually link to C in any structured section** (only inline mention) — skip, no required reciprocal. Optionally add `## Notes` entry in C: "Referenced inline by [[N]]".
+- **C cannot logically reciprocate** (e.g., N puts C in Builds on but C is actually at the same layer or higher) — this signals a classification mismatch. Flag `[CONFLICT]` and surface in daily log; do not silently force reciprocal that breaks layer taxonomy.
+- **More than 5 inbound references** — fine, list all; this concept is highly central. Add a `centrality: high` note to frontmatter (optional metadata).
+
 ## Anti-patterns (what NOT to do)
 
 - **Wikipedia summary.** If your `## What` and `## Why` read like Investopedia, you've failed. The why must be sharp and have a perspective. Better short and sharp than long and generic.
@@ -240,6 +309,8 @@ If the input adds nothing new beyond what's already in the file, skip enrichment
 - **Walls of prose without visual.** If the mechanism has actors, flow, or layered structure, prose alone fails to convey it. The reader's brain processes a diagram in 2 seconds and 400 words in 60 — use the diagram.
 - **Abstract claims without examples.** Market-layer note that says "MEV extracts value" without naming Inverse Finance / KyberSwap / Beanstalk with $ amounts is just theory. Anchor to specific incidents — that's what makes the note useful when you re-read it later.
 - **Decorative diagrams.** Don't ship a mermaid block just to satisfy the rule. If the diagram doesn't add information beyond what the prose conveyed, omit. Better to skip than ship noise.
+- **One-way links.** Concept C that lists `[[N]]` in Builds on/Enables/Related but N has no reciprocal link back to C is a half-finished note. Reciprocity is non-optional. If layer taxonomy genuinely prevents reciprocity, flag `[CONFLICT]` — don't silently skip.
+- **Reasoningless reciprocal links.** When reciprocity check adds `[[N]]` to C, write a 1-sentence reasoning explaining the link from C's perspective. Bare `[[N]]` without reasoning forfeits half the value of the link.
 
 ## When to flag for human review
 
@@ -316,7 +387,11 @@ Block Builder     --- include bundle if bid > others
 - **Inverse Finance INV/DOLA — 2022-04-02 — $15.6M loss** — oracle manipulation MEV via Sushiswap TWAP, executed in single block. [source](https://rekt.news/inverse-rekt)
 - **EigenPhi sandwich attack dashboard** — ongoing aggregate: ~$X/week sandwich extraction across major DEX pools. [eigenphi.io](https://eigenphi.io)
 
-**Step 10-11 — Persistence**: move input to `_processed/2026-05-30/`, append daily log entry. Summary message: "1 input → 1 new concept (mev) with 4 sources, 1 mermaid diagram, 3 case studies, 2 vertical links."
+**Step 10 — Reciprocity check**: grep vault for inbound wikilinks to `mev`. On a fresh graph this returns nothing. After more concepts exist (e.g., `block-production.md` is created later via graph walk), the reciprocity procedure will run on THAT new concept and add `## Enables: [[mev]]` to block-production, closing the loop.
+
+If reverse: imagine `mev.md` is being created when `block-production.md` already exists with `## Enables: [[mev]]` in its body. Then mev's `## Builds on` must include `[[block-production]]` with reasoning explaining what block-production gives mev. Reciprocity goes both ways at creation time.
+
+**Step 11-12 — Persistence**: move input to `_processed/2026-05-30/`, append daily log entry. Summary message: "1 input → 1 new concept (mev) with 4 sources, 1 ASCII diagram, 3 case studies, 2 vertical links, reciprocity check ran (0 inbound refs found — fresh graph)."
 
 ## Closing
 
