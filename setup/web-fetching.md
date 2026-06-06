@@ -2,7 +2,7 @@
 
 Riset untuk handle source-source crypto yang punya bot protection (Cloudflare Turnstile, fingerprinting) atau auth wall (Twitter/X logged-out view kosong).
 
-**Status**: research + decision. Tidak ada install yet. Eksekusi ketika friction text-paste mulai jadi blocker.
+**Status**: **Scrapling tested + verified (2026-06-06)**. Tier 2 (StealthyFetcher dengan `solve_cloudflare=True`) berhasil bypass Cloudflare Turnstile pada test lab + real-world crypto site. Install di Hermes venv selesai. **Integration ke skill belum** — masih opsional.
 
 ---
 
@@ -225,13 +225,148 @@ CloakBrowser ketika:
 
 ---
 
-## Decision (Juni 2026)
+## Test results — 2026-06-06
 
-**Sekarang**: stick dengan Tier 0 + 1. Text-paste untuk Twitter, default HTTP fetch untuk yang lain. Skill flag `[NEEDS-MANUAL]` untuk yang gagal.
+Test eksplisit untuk validate klaim Scrapling "Bypasses Cloudflare Turnstile out-of-the-box".
 
-**Re-evaluate**: kalau setelah 2 minggu pakai, friction text-paste atau coverage gap mulai nyata. Install Scrapling sebagai Phase 1 standalone CLI. Phase 2 agent integration nyusul.
+### Setup
 
-**Skip permanently** (sampai ada kasus konkret): X MCP, CloakBrowser, Nitter, twscrape.
+Install Scrapling di `~/.hermes/hermes-agent/venv` ada **nuansa** — `scrapling install` (auto setup CLI) **gagal** karena salah panggil system Python alih-alih venv Python. Manual install sequence:
+
+```bash
+# 1. venv-nya gak punya pip — bootstrap dulu
+~/.hermes/hermes-agent/venv/bin/python3 -m ensurepip --upgrade
+
+# 2. Install scrapling + optional runtime deps yang tidak ke-auto-pull
+~/.hermes/hermes-agent/venv/bin/python3 -m pip install \
+  scrapling playwright camoufox patchright msgspec "curl_cffi[binary]"
+
+# 3. Download Playwright Chromium binary
+~/.hermes/hermes-agent/venv/bin/python3 -m playwright install chromium
+
+# 4. System libs (Chromium butuh — fail tanpa ini dengan libcups.so.2 error)
+sudo ~/.hermes/hermes-agent/venv/bin/python3 -m playwright install-deps chromium
+```
+
+Total disk footprint: ~600MB (Chromium binary dominasinya).
+
+### Test 1 — nowsecure.nl (lab anti-bot, aggressive CF Turnstile)
+
+| Tier | Method | Result | Elapsed |
+|---|---|---|---|
+| Baseline | `urllib` no stealth | Challenge page served | <1s |
+| 1 | `Fetcher.get(stealthy_headers=True)` | ❌ Challenge page served (no bypass) | 0.3s |
+| 2 | `StealthyFetcher.fetch(headless=True)` (no `solve_cloudflare`) | ❌ Challenge page served (no bypass) | 8s |
+| **2b** | **`StealthyFetcher.fetch(solve_cloudflare=True)`** | ✅ **Bypassed**, real content delivered | **4s** |
+
+Tier 2b log:
+```
+INFO: The turnstile version discovered is "embedded"
+INFO: Cloudflare captcha is solved
+```
+
+Body title `nowsecure.nl`, visible content `NOWSECURE by nodriver` (actual site content, not challenge).
+
+### Test 2 — dexscreener.com/solana (real crypto site, CF behind)
+
+| Tier | Method | Result | Elapsed |
+|---|---|---|---|
+| 1 | `Fetcher.get(stealthy_headers=True)` | ✅ Works, 1.3MB real content | **0.3s** |
+| 2 | `StealthyFetcher.fetch(solve_cloudflare=True)` | ✅ Works (Scrapling log: "No Cloudflare challenge found") | 8s |
+
+DexScreener gak trigger Turnstile untuk landing page logged-out — Tier 1 cheap path cukup. Confirms layered escalation rationale.
+
+### Verdict
+
+- ✅ Scrapling klaim **valid** dengan caveat: `solve_cloudflare=True` parameter wajib di Tier 2; default StealthyFetcher saja tidak bypass.
+- ✅ HTTP-only Tier 1 work untuk site CF-behind tapi tidak aktif memaksa Turnstile (mayoritas sites).
+- ❌ HTTP-only Tier 1 **tidak cukup** untuk site dengan Turnstile aktif.
+- Layered strategy (Tier 1 dulu, escalate Tier 2 kalau CF challenge terdeteksi di response) **viable** dan cost-efficient.
+
+---
+
+## Layered fetch — reference implementation
+
+Snippet Python untuk wrapper script atau skill tool fallback:
+
+```python
+from scrapling.fetchers import Fetcher, StealthyFetcher
+
+CF_CHALLENGE_MARKERS = (
+    "just a moment",
+    "checking your browser",
+    "verifying you are human",
+    "verify you are",
+)
+
+def fetch_smart(url: str, timeout: int = 30) -> str:
+    """Layered fetch: HTTP first (~0.3s), escalate to stealth browser
+    with Turnstile solver only if CF challenge detected (~4-8s)."""
+    
+    # Tier 1: HTTP + TLS impersonation + stealthy headers
+    try:
+        page = Fetcher.get(url, stealthy_headers=True, timeout=timeout)
+        body_lower = page.html_content.lower()
+        if not any(m in body_lower for m in CF_CHALLENGE_MARKERS):
+            return page.html_content
+    except Exception:
+        pass  # fall through to Tier 2
+    
+    # Tier 2: StealthyFetcher with Cloudflare solver
+    page = StealthyFetcher.fetch(
+        url,
+        headless=True,
+        solve_cloudflare=True,
+        network_idle=True,
+        timeout=90_000,  # ms
+    )
+    return page.html_content
+```
+
+Disimpan nanti di `scripts/lib/fetch_smart.py` atau di-inline ke wrapper script.
+
+---
+
+## Decision (Juni 2026 — updated post-test)
+
+**Sekarang**: Scrapling **installed di Hermes venv** dan diverifikasi work untuk Turnstile bypass. Integration ke skill masih opsional — bisa dieksekusi atau ditunda.
+
+**Skip permanently** (sampai ada kasus konkret): X MCP (overkill untuk hobbyist), CloakBrowser (cukup Scrapling), Nitter (mati), twscrape (risk akun ban).
+
+---
+
+## Next plan (post-verification)
+
+Tiga arah, urut effort low → high:
+
+### A. Stop here — research-only, no agent integration
+- Doc ini sudah update dengan capabilities verified
+- Scrapling tetap installed di venv (ready saat dibutuhkan)
+- Skill knowledge-curator gak diubah
+- Kalau di kemudian hari ada use case spesifik (mis. monitor satu site CF-protected), tinggal grab `fetch_smart` snippet di atas
+
+**Trigger lanjut**: kalau setelah 2 minggu agent jalan, `[NEEDS-MANUAL]` flag muncul >3x karena CF block
+
+### B. Standalone CLI wrapper (recommended)
+- Bikin `scripts/fetch_url.sh` (di repo) + thin wrapper di `~/.hermes/scripts/`
+- Implement layered fetch dari snippet di atas
+- Bisa dipanggil manual: `bash ~/.hermes/scripts/fetch_url.sh <URL>`
+- Bisa dipanggil agent via terminal tool (kalau skill explicit instruct)
+- Skill **belum** di-update — manual escalation only
+- Effort: ~30 menit (write script + commit + symlink + smoke test)
+
+**Trigger lanjut ke C**: kalau setelah pakai 1-2 minggu manual, lu confidence cukup
+
+### C. Full integration ke skill
+- Update `skills/knowledge-curator/SKILL.md` step 4 (active source gathering)
+- Add fallback rule: kalau default web tool fail dengan CF challenge marker, agent invoke `terminal bash fetch_url.sh <URL>`
+- Agent otomatis escalate tanpa user intervention
+- Effort: ~1 jam (skill edit + push + test loop dengan inbox drop URL CF-protected)
+- Risk: agent over-trigger StealthyFetcher (8s) bahkan untuk site yang Tier 1 work. Mitigasi: skill instruction explicit "only use fetch_url.sh as fallback, not first attempt"
+
+**Stay at C indefinitely** kecuali ada kebutuhan parallel (multiple URLs concurrently → bikin pool), atau Scrapling sendiri update breaking changes.
+
+---
 
 ---
 
