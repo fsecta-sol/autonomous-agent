@@ -76,6 +76,12 @@ For each file in `00-Inbox/_knowledge/`:
      - AI-generated content farms
    - Read at least 2 sources from whitelist with web-fetch. Cite specific findings inline in `## Why` paragraphs.
    - If genuine canonical sources cannot be found (rare for crypto), mark `[NEEDS-SOURCE]` and flag.
+   - **Fetch fallback for bot-protected or JS-heavy sites.** When the default web tool returns a Cloudflare challenge, HTTP 403/503 from a Cloudflare server, or a suspiciously thin SPA shell (<20KB body without article content), retry the URL with the project's Scrapling wrapper via the terminal tool:
+     - Default fallback: `bash ~/autonomous-agent/scripts/fetch_url.sh <URL>` — covers most CF Turnstile sites via Tier 1 HTTP + TLS impersonation.
+     - For SPAs / JS-rendered apps where Tier 1 returns an empty shell, force browser mode: `bash ~/autonomous-agent/scripts/fetch_url.sh --stealth <URL>` (~11s, runs headless Chromium and lets JS render content).
+     - Known-stealth domains (use `--stealth` directly without trying default first): `app.uniswap.org`, `app.aave.com`, `dune.com` analytics views, similar SPA-style dashboards.
+     - Output of the script is the raw HTML body of the page on stdout. Read it, extract text content, then resume the standard concept-extraction workflow. Treat the URL as the authoritative source for citation purposes (the script is just a fetch mechanism, not a separate source).
+     - If both default web tool AND the fallback script fail (rare), mark `[NEEDS-MANUAL]` so user can paste content directly to inbox.
 5. **For each concept, slug it** to lowercase-kebab-case (e.g., "Proof of Stake" → `proof-of-stake`).
 6. **Check if concept exists:** look for `03-Areas/concepts/<slug>.md`.
    - **If exists:** read it, then enrich (see "Enrichment rules" below). Do NOT overwrite. Do NOT duplicate existing content.
