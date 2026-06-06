@@ -52,12 +52,34 @@ code: <github-url-optional>
 audit: <url-optional>
 twitter: @<handle-optional>
 discord: <url-optional>
+contracts:                        # on-chain deployed contracts (CA)
+  - <chain>:<address>             # e.g., ethereum:0x1234...
+  - base:0xabcd...
+  - solana:<address>
 other: <comma-separated-urls>
 
 [Optional free text: user's framing / why interested / specific questions]
 ```
 
-Fields are loose YAML-style header. Tolerate variations (e.g., `repo:` instead of `code:`, `paper:` instead of `whitepaper:`). If `project:` slug is missing, derive from filename. If no URLs provided, search the web for canonical project sources.
+Fields are loose YAML-style header. Tolerate variations (e.g., `repo:` instead of `code:`, `paper:` instead of `whitepaper:`, `ca:` or `contract:` instead of `contracts:`). Single CA also accepted as `contract: ethereum:0x...`. If `project:` slug is missing, derive from filename. If no URLs provided, search the web for canonical project sources.
+
+### Block explorer URL mapping (for CA fetching)
+
+When `contracts:` is provided, fetch verified source from the chain's explorer:
+
+| Chain alias | Explorer URL pattern (append `#code` for EVM verified source) |
+|---|---|
+| `ethereum` / `eth` / `mainnet` | `https://etherscan.io/address/<ca>` |
+| `base` | `https://basescan.org/address/<ca>` |
+| `arbitrum` / `arb` | `https://arbiscan.io/address/<ca>` |
+| `optimism` / `op` | `https://optimistic.etherscan.io/address/<ca>` |
+| `polygon` | `https://polygonscan.com/address/<ca>` |
+| `bsc` / `bnb` | `https://bscscan.com/address/<ca>` |
+| `avalanche` / `avax` | `https://snowtrace.io/address/<ca>` |
+| `solana` / `sol` | `https://solscan.io/account/<ca>` |
+| `aptos` | `https://explorer.aptoslabs.com/account/<ca>` |
+| `sui` | `https://suiscan.xyz/mainnet/object/<ca>` |
+| other / unknown | search web for `<chain> block explorer` |
 
 ## Workflow per run
 
@@ -74,6 +96,10 @@ For each file in `00-Inbox/_projects/`:
    - On CF challenge / 403 / 503 / suspicious SPA shell: retry with `bash ~/autonomous-agent/scripts/fetch_url.sh <URL>`.
    - For known-stealth domains (app.*.org, *.app, dashboards): use `bash ~/autonomous-agent/scripts/fetch_url.sh --stealth <URL>` directly.
    - For PDFs: use available PDF reader; if unavailable, mark `[NEEDS-MANUAL]` and skip.
+   - **For each contract address (CA) in `contracts:` field:** fetch the verified source page from the chain's block explorer (URL pattern in "Block explorer URL mapping" above). Etherscan-family explorers are almost always Cloudflare-protected — use `bash ~/autonomous-agent/scripts/fetch_url.sh <explorer-url>` directly (Tier 1 usually suffices with TLS impersonation). For EVM chains, append `#code` to URL to land on verified source tab.
+     - If contract not verified: note this in `## On-chain deployment` section (unverified deployment is itself a signal).
+     - If proxy pattern detected (EIP-1967 / UUPS / Transparent): follow to implementation address and fetch that too.
+     - If multiple addresses returned (factory, registry, multisig): map the relationship.
    - If no URLs provided at all: actively search for canonical sources (whitelist: paradigm.xyz, flashbots, vitalik.eth.limo, ethresear.ch, audit firms, project's official org). Skip news media unless used as breadcrumb to primary source.
 
 4. **Read code — CRITICAL step, what separates this skill from concept curation.**
@@ -105,6 +131,14 @@ For each file in `00-Inbox/_projects/`:
    ```
 
    **Skip unless investigating a specific claim:** full test suite, build configs, deploy scripts, docs/ folder if separate from contracts. Token budget matters more than completeness.
+
+   **If CA provided AND GitHub repo provided: compare them.** Verified on-chain bytecode source can differ from GitHub HEAD because:
+   - Team deployed an older version than current `main` branch
+   - Hot-fix applied directly to deployment without PR
+   - Repo `main` is experimental; deployment is stable branch/tag
+   - Repo is misleading (different project entirely, dead repo, or fork)
+
+   Concrete comparison method: locate the contract file in GitHub by matching contract name from explorer, then diff key functions (constructor, admin functions, core logic). Don't full-text diff (compiler artifacts differ); focus on semantic divergence — different function signatures, missing functions, additional admin powers in deployed version. Material divergences go into `## Gap analysis` with severity tag.
 
 5. **Synthesize per Project Note Schema** (see below). Fill each section based on what you read.
 
@@ -158,6 +192,11 @@ sources:
   code: <github-url>
   audit: [<url-1>, <url-2>]
   other: [<urls>]
+contracts:
+  - chain: <chain-alias>
+    address: <ca>
+    role: <main | proxy | implementation | factory | registry | multisig | etc>
+    verified: <true | false>
 ---
 
 ## Identity
@@ -176,6 +215,19 @@ whitepaper or marketing. Tag the source. This is what they SAY they are.>
   - <mechanism 1>: <observation>
   - <mechanism 2>: <observation>
 >
+
+## On-chain deployment
+<What is ACTUALLY deployed on-chain — the ground truth users interact with.
+This section MAY differ from `## Implementation reality` (which is what
+the repo contains). Material differences flagged in `## Gap analysis`.
+
+For each contract address:
+- **<chain>:<address>** — <role: main/proxy/implementation/factory/etc> — verified: <yes/no>
+  - <key observation from verified source> (e.g., "Admin can pause via UUPS upgrade; multisig 4/7")
+  - <if proxy: implementation address it points to, last upgrade date if available>
+  - <repo-vs-deployment delta if both available: "deployed version matches repo at commit X" or "deployed has additional admin function not in repo"
+
+If no contracts provided in input or no on-chain deployment yet (e.g., pre-launch project), write: "No on-chain deployment provided / project pre-launch." Do not fabricate addresses.>
 
 ## Gap analysis (claim vs reality)
 <Where whitepaper diverges from code. Material gaps flagged. This is
@@ -266,6 +318,8 @@ When proposing a novel primitive, guess the layer based on what it does, not whe
 6. **Sources canonical for non-project info.** When citing background mechanisms, use whitelist from knowledge-curator (Paradigm, Flashbots, vitalik.eth.limo, ethresear.ch, EIPs, audit firms). Project's own materials are sources for project's claims but should be tagged as such.
 
 7. **No project notes for VAPORWARE.** If project has no code repo at all (whitepaper-only, no audit, no testnet) → still can create note, but `status: pre-launch` and `category: needs-evidence`. Notes get strict scrutiny in advantage framework.
+
+8. **CA verification when provided.** If user supplied a `contracts:` field, EVERY address must be looked up in the relevant block explorer and `## On-chain deployment` populated. Unverified contracts must be explicitly noted (it's a trust signal). If repo AND CA both provided, attempt the repo-vs-deployment delta check — even a "no material divergence found at commit X" statement is valuable evidence.
 
 ## Enrichment rules (when project note already exists)
 
