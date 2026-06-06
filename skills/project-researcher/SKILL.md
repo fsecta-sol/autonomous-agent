@@ -208,13 +208,76 @@ whitepaper or marketing. Tag the source. This is what they SAY they are.>
 
 ## Implementation reality
 <What the code actually does — based on the entry-point files you read.
-- Repo: <url + commit hash if available>
-- Entry points read: <list of file paths>
-- Key mechanisms observed at code level (be specific, cite line numbers
-  or function names when material):
+- **Repo**: <url + commit hash>
+- **Entry points read** (mirror the actual repo directory structure as a
+  markdown tree — easier to navigate than a flat list. Annotate each file
+  with a 1-line role description after `—`. Use box-drawing chars `├── │ └──`.
+  Show only directories that contain files you read; collapse irrelevant
+  branches. Descend depth as token budget allows.):
+
+  ```
+  <root-dir>/
+  ├── <subdir-1>/
+  │   ├── <File1.sol>          — <1-line: what this contract does>
+  │   ├── <File2.sol>          — <role>
+  │   └── <nested-dir>/
+  │       └── <File3.sol>      — <role>
+  ├── <subdir-2>/
+  │   └── <File4.sol>          — <role>
+  └── <config-or-deploy-file>  — <what params extracted>
+  ```
+
+- **Key mechanisms observed at code level** (be specific — cite function
+  names, addresses, config values when material):
   - <mechanism 1>: <observation>
   - <mechanism 2>: <observation>
 >
+
+## How it works
+<Operational flow at the system level — what happens when the project
+runs. This section CONNECTS the static code analysis above to the
+mechanisms and risks below. Should make the abstract sections concrete.
+
+REQUIRED elements:
+1. **ASCII diagram** (pipe-flow style — consistent with concept notes)
+   showing the primary operational flow: actors, data movement, trust
+   boundaries, key decision points. Use 5-9 nodes max for readability.
+2. **2-4 short paragraphs** explaining the flow textually:
+   - Transaction / value lifecycle (how does the main flow work end-to-end?)
+   - Trust model (who controls what; where are the failure-by-trust points?)
+   - Failure modes (what happens if X actor misbehaves or goes offline?)
+
+Diagram conventions:
+- Single arrow `|` + `v` for forward flow
+- `--- text` for side annotations explaining a step
+- `[ bracket ]` for end states or terminal conditions
+- Group related actors in a horizontal cluster when natural>
+
+```
+<Actor 1>
+  |
+  | <action / data flow>
+  v
+<Actor 2>          --- <annotation: what happens at this step>
+  |
+  | <action>
+  v
+<Actor 3>          --- <annotation>
+  |
+  | <action>
+  v
+[ <final state> ]
+trust assumption: <who must behave honestly for this to be safe>
+```
+
+### <Section subtitle for textual explanation>
+<Paragraph explaining the operational flow.>
+
+### <Trust model subtitle>
+<Paragraph naming each privileged role and what they can do.>
+
+### <Failure modes subtitle>
+<Paragraph or bullet list: what breaks if X happens.>
 
 ## On-chain deployment
 <What is ACTUALLY deployed on-chain — the ground truth users interact with.
@@ -321,6 +384,10 @@ When proposing a novel primitive, guess the layer based on what it does, not whe
 
 8. **CA verification when provided.** If user supplied a `contracts:` field, EVERY address must be looked up in the relevant block explorer and `## On-chain deployment` populated. Unverified contracts must be explicitly noted (it's a trust signal). If repo AND CA both provided, attempt the repo-vs-deployment delta check — even a "no material divergence found at commit X" statement is valuable evidence.
 
+9. **Implementation reality uses tree format.** The `## Implementation reality` section's "Entry points read" list MUST be formatted as a markdown directory tree (box-drawing chars `├── │ └──`) mirroring the actual repo structure, not a flat bullet list. Readers should be able to navigate the repo's organization at a glance.
+
+10. **How it works section required.** Every project note MUST include `## How it works` with an ASCII pipe-flow diagram + 2-4 explanatory paragraphs (operational flow, trust model, failure modes). The diagram makes abstract mechanism / risk discussions concrete. If the project is too thin to diagram (e.g., pre-launch with no operational flow), state that explicitly: "No operational flow yet — pre-launch / vaporware."
+
 ## Enrichment rules (when project note already exists)
 
 When the project note already exists, add without duplicating:
@@ -397,14 +464,53 @@ Stripe + Paradigm incubated EVM L1 for stablecoin payments. Stripe is co-author 
 git clone --depth 1 https://github.com/tempoxyz/tempo /tmp/research-tempo-blockchain
 cd /tmp/research-tempo-blockchain
 cat README.md
-# Identify: Rust + Reth dependency (EVM execution). Custom Simplex consensus.
-# Entry points read:
-# - reth-imports.toml (which Reth modules are pulled in)
-# - consensus/src/simplex.rs (custom consensus implementation)
-# - protocol/tip-20.rs (custom payment-lane primitive)
-# - protocol/fee-amm.rs (gas conversion AMM)
+ls -R --depth 2  # map repo structure
 grep -rn "onlyOwner\|admin\|authority" --include="*.rs"  # check centralization
 ```
+
+Identify: Rust + Reth dependency (EVM execution). Custom Simplex consensus.
+
+Entry points read (rendered as tree in note):
+
+```
+consensus/src/
+├── simplex.rs              — custom Simplex BFT consensus (sub-second finality)
+└── safety.rs               — finality gadget + slashing logic
+protocol/
+├── tip-20.rs               — payment-lane enshrined ERC-20 extension
+├── fee-amm.rs              — on-chain AMM converting any USD stablecoin to gas token
+└── tempo-tx.rs             — smart-account protocol primitive (WebAuthn, sponsored fees)
+reth-imports.toml           — Reth modules pulled in as library (not fork)
+deploy-config/mainnet.toml  — validator set, gas params, multisig admins
+```
+
+**Step 4b — "How it works"** (new section between Impl reality and On-chain):
+
+Diagram showing user→sequencer→builder→relay→validator flow for a Tempo payment tx:
+
+```
+User wallet (Tempo Tx smart account)
+  |
+  | submit USDC swap to merchant
+  v
+Mempool             --- TIP-20 payment lane filters by enshrined memo
+  |
+  | searchers observe (or not, if private lane)
+  v
+Block Builder       --- aggregates lane txs, computes Fee AMM gas conversion
+  |
+  | submit block via relay
+  v
+Validator (Simplex) --- finalizes in sub-second via BFT vote
+  |
+  | commit
+  v
+[ tx settled, USDC paid, gas paid from USDC via Fee AMM ]
+trust: Simplex requires 2/3 honest stake; Fee AMM relies on AMM price stability
+```
+
+Plus 2-4 paragraphs explaining: payment lifecycle, trust model (who controls
+validator set, multisig admins), failure modes (AMM imbalance during volatility).
 
 **Step 5-6**: synthesize. Sample advantage framework section:
 
