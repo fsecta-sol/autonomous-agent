@@ -28,7 +28,7 @@ Default sistem: **mati, dibangunkan cron berkala.** Stateless. Ingatan ada di di
 | [scripts/](scripts/) | Preflight scripts (`process_inbox.sh`, `graph_walker.sh`) yang di-symlink ke `~/.hermes/scripts/` di server. |
 | [skills/knowledge-curator/](skills/knowledge-curator/SKILL.md) | Inbox-driven concept curation: input → web sources → schema-enforced concept notes with reciprocity. |
 | [skills/project-researcher/](skills/project-researcher/SKILL.md) | Project deep-dive: whitepaper + docs + code + CA verified deployment → project notes with gap analysis, advantage framework, graph integration. |
-| [skills/companion/](skills/companion/SKILL.md) | Telegram #ask chat: vault lookup → grounded answer, vault gap → web research + auto-curate inbox handoff. |
+| [skills/companion/](skills/companion/SKILL.md) | Telegram #ask chat: vault lookup → grounded answer, vault gap → web research + auto-curate inbox handoff. See [RESEARCH.md](skills/companion/RESEARCH.md) for v2 design research roadmap. |
 | [skills/](skills/) | Skills root (above) — di-symlink ke `~/.hermes/skills/` di server. |
 
 ---
