@@ -227,7 +227,22 @@ Choose exactly one layer per concept. If you cannot decide between two, the conc
 1. **Vertical link mandatory.** Every concept note has at least one `Builds on` (link to lower layer) or `Enables` (link to upper layer) — except `cryptography` (which only has `Enables`) and `market` (which only has `Builds on`). `cross-cutting` must link to at least 2 different layers.
 2. **No trading signals.** Never write "buy", "sell", "target price", "long", "short", "entry", "exit", or any directional bet. If input contains these, ignore them; extract the underlying mechanism only.
 3. **No price prediction.** Never write predictions about future price movement. Mechanism analysis is fine; "X will pump because Y" is not.
-4. **No project notes here.** If the input is purely about a specific project/token (e.g., "Solana's TPS"), extract the concept (e.g., `parallel-execution`) and mention Solana as an example inside the concept note. Do not create a `solana.md` concept note.
+4. **No project notes here. HARD REJECT project-named slugs.** If the input is purely about a specific project/token, extract the underlying mechanism as the concept and mention the project as an example inside the concept's body. Do not create concept files named after projects.
+
+   **Reject list (non-exhaustive — apply spirit, not just letter):** any L1, L2, rollup, DEX, lending protocol, oracle, bridge, wallet, exchange, or token name. Concrete examples that MUST be rejected as concept slugs:
+   - L1/L2 chains: `bitcoin`, `ethereum`, `solana`, `avalanche`, `polygon`, `base`, `arbitrum`, `optimism`, `monad`, `sui`, `aptos`, `near`, `tempo`, `unichain`, `scroll`, `zksync`, `starknet`, `linea`, `mantle`, `blast`, `world-chain`
+   - DEXes/AMMs: `uniswap`, `aerodrome`, `curve`, `balancer`, `pancakeswap`, `sushiswap`, `raydium`, `orca`
+   - Lending: `aave`, `compound`, `morpho`, `spark`, `kamino`
+   - Stablecoins/issuers: `maker`, `frax`, `circle`, `tether`
+   - Liquid staking / restaking: `lido`, `rocket-pool`, `eigenlayer`, `etherfi`, `kelp`
+   - Oracles: `chainlink`, `pyth`, `redstone`
+   - Bridges: `wormhole`, `layerzero`, `hyperlane`, `axelar`
+   - Infrastructure / wallets: `metamask`, `coinbase`, `flashbots`
+   - MEV-specific: `mev-boost`, `suave`, `shutter` (the *protocols* — but `pbs` and `encrypted-mempool` ARE valid concepts because they describe mechanisms)
+
+   **Decision procedure:** before writing any concept note, ask "is this a noun for a *mechanism*/*idea*/*dynamic*, or a noun for a *product*/*deployment*?" Only the former qualifies. If unclear, default to REJECT and flag `[REJECT-PROJECT]` in daily log with the slug and reasoning. User can manually route to project-researcher skill if appropriate.
+
+   **For incoming input that names a project:** extract the mechanism it illustrates (Base → maybe `[[sequencer-mev]]` or `[[op-stack-deployment]]`; Uniswap → maybe `[[concentrated-liquidity]]` or `[[orderflow-auction]]`), then write that concept note, citing the project as an in-body example. The project's actual research lives in `02-Projects/<slug>.md` via the project-researcher skill, not here.
 5. **Personal voice in `## Notes` only.** The body sections are factual. Opinion / framing / perspective goes in `## Notes` and is welcome there.
 6. **External canonical sources MANDATORY.** `## Sources` must contain at least 1 URL from the whitelist in Workflow step 4 (Paradigm, Flashbots, vitalik.eth.limo, ethresear.ch, EIPs, original whitepapers, audit firms, on-chain analytics). `user-paste` alone is NOT enough. News media and influencer threads do not count as canonical. If genuine canonical source cannot be found, flag `[NEEDS-SOURCE]`.
 7. **Visualize when there's flow or structure.** If the mechanism involves sequential interaction between actors, layered architecture, state transitions, or value/data flow, include `## Diagram` (Mermaid preferred, ASCII for simple stacks). The diagram must be meaningful — not decorative. Reject reflexive empty `mermaid` blocks; if truly nothing to visualize, omit the section entirely rather than ship a hollow one.
