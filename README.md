@@ -26,7 +26,10 @@ Default sistem: **mati, dibangunkan cron berkala.** Stateless. Ingatan ada di di
 | [setup/telegram.md](setup/telegram.md) | Telegram bot utilization: #digest (cron output delivery) + #inbox (paste dari HP → save ke `00-Inbox/`). Includes Cloudflare/Twitter scoping (text-paste strategy). |
 | [setup/web-fetching.md](setup/web-fetching.md) | Anti-bot & auth-walled source strategy: surveys X MCP, Scrapling, CloakBrowser. Layered escalation Tier 0 (text-paste) → Tier 3 (CloakBrowser). Triggers untuk implement. |
 | [scripts/](scripts/) | Preflight scripts (`process_inbox.sh`, `graph_walker.sh`) yang di-symlink ke `~/.hermes/scripts/` di server. |
-| [skills/](skills/) | Procedural memory yang di-symlink ke `~/.hermes/skills/` di server. |
+| [skills/knowledge-curator/](skills/knowledge-curator/SKILL.md) | Inbox-driven concept curation: input → web sources → schema-enforced concept notes with reciprocity. |
+| [skills/project-researcher/](skills/project-researcher/SKILL.md) | Project deep-dive: whitepaper + docs + code + CA verified deployment → project notes with gap analysis, advantage framework, graph integration. |
+| [skills/companion/](skills/companion/SKILL.md) | Telegram #ask chat: vault lookup → grounded answer, vault gap → web research + auto-curate inbox handoff. |
+| [skills/](skills/) | Skills root (above) — di-symlink ke `~/.hermes/skills/` di server. |
 
 ---
 

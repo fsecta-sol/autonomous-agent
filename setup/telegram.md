@@ -10,12 +10,12 @@ Plan untuk utilize Telegram bot yang sudah connected ke group thread. **Status s
 
 | Thread | Tujuan | Arah | Status |
 |---|---|---|---|
-| **#digest** | Setiap cron job complete (yang ada output, bukan SILENT) → kirim ringkasan final response agent | Bot → User | 🟡 plan |
-| **#inbox** | User paste tweet/URL/note dari HP → bot save verbatim ke `00-Inbox/_knowledge/from-tg-<timestamp>.md` → cron next tick proses | User → Bot | 🟡 plan |
+| **#digest** | Setiap cron job complete (yang ada output, bukan SILENT) → kirim ringkasan final response agent | Bot → User | ✅ active |
+| **#inbox** | User paste tweet/URL/note dari HP → bot save verbatim ke `00-Inbox/_knowledge/from-tg-<timestamp>.md` → cron next tick proses | User → Bot | ✅ active |
+| **#ask** | Q&A + ngobrol crypto. Vault lookup → kalau ada answer grounded; kalau gap → web research + auto-write ke `00-Inbox/_knowledge/` untuk curation. Skill: `companion`. | Bidirectional | 🟡 plan |
 
 **Deferred** (tunggu kebutuhan beneran muncul):
 - `#alerts` — failures, `[NEEDS-*]` flags, provider down
-- `#ask` — Q&A loop pakai knowledge graph (butuh skill `q-answerer` belum dibikin)
 - `#weekly` — Senin meta-review (butuh skill `meta-reviewer`)
 
 ---
@@ -119,6 +119,80 @@ hermes cron run process-inbox-knowledge
 # Wait ~30s untuk agent process + delivery
 # Message muncul di #digest thread dengan final agent response
 ```
+
+---
+
+## Setup #ask (chat agent — Q&A + auto-curate)
+
+Pattern: gateway always-on listener + channel_prompts route message → `companion` skill (vault lookup first, web fallback with inbox handoff).
+
+### Step 1 — Dapatkan thread_id untuk #ask
+
+Sama cara dengan thread_id #digest dan #inbox: forward salah satu message dari thread #ask ke [@userinfobot](https://t.me/userinfobot), catat `message_thread_id`.
+
+### Step 2 — Symlink skill (kalau belum)
+
+```bash
+ssh hermes
+ln -sf ~/autonomous-agent/skills/companion ~/.hermes/skills/companion
+```
+
+### Step 3 — Konfigurasi channel_prompts
+
+Edit `~/.hermes/config.yaml`. Tambah entry untuk #ask thread:
+
+```yaml
+telegram:
+  reactions: false
+  allowed_chats: '-1003928226918'
+  channel_prompts:
+    '-1003928226918:<inbox-thread-id>':
+      # ... existing inbox config ...
+    '-1003928226918:<ask-thread-id>':         # NEW
+      prompt: |
+        You are responding to a Telegram chat in the #ask thread.
+        Follow the companion skill exactly. The user's message is the
+        latest entry in this thread's conversation; Hermes maintains
+        session continuity per thread automatically — reference earlier
+        Q&As when natural.
+        
+        Workflow: vault search first (03-Areas/concepts/, 02-Projects/),
+        narrow read top 2-3 matches. If vault sufficient → reply grounded
+        with [[wikilink]] citations. If vault gap → web research via
+        fetch_url.sh, reply with web citations, AND write curation request
+        to 00-Inbox/_knowledge/q-<topic>-<timestamp>.md so knowledge-curator
+        creates a proper concept note next cron tick. Always cite. Never
+        fabricate.
+      workdir: /home/hermes/vault
+      skills: [companion]
+```
+
+### Step 4 — Restart gateway
+
+```bash
+hermes gateway restart
+hermes gateway status
+```
+
+### Step 5 — Test loop
+
+Di Telegram #ask thread:
+1. Tanya pertanyaan yang lu yakin vault punya jawaban (mis. "apa itu MEV").
+2. Bot reply dengan grounded answer + `[[wikilink]]` citations dalam ~10-30s.
+3. Lalu tanya pertanyaan yang lu yakin vault gap (mis. "apa itu account abstraction" — kalau belum ada di concepts).
+4. Bot reply dengan web sources + ack "saya tambahin ke inbox".
+5. Verify di server: `ls ~/vault/00-Inbox/_knowledge/q-*` — file curation request muncul.
+6. Tunggu next cron tick (≤30 menit) — concept note baru muncul di `~/vault/03-Areas/concepts/`.
+
+### Cost estimate
+
+| Action | LLM cost estimate |
+|---|---|
+| #ask reply (vault has answer) | ~10-20K tokens (vault search + read + synthesis) |
+| #ask reply (vault gap + web fallback) | ~30-50K tokens (web fetch + synthesis + inbox write) |
+| Subsequent knowledge-curator processing of inbox file | ~30-60K tokens (sama dengan normal inbox flow) |
+
+Total per Q&A yang trigger curation: ~60-110K tokens. Mahal-ish, tapi yang dapet adalah answer ke user PLUS concept note durable. ROI tinggi kalau lu memang tanya yang belum di graph.
 
 ---
 
