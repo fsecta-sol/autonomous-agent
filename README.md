@@ -18,6 +18,7 @@ Default sistem: **mati, dibangunkan cron berkala.** Stateless. Ingatan ada di di
 
 | File | Isi |
 |---|---|
+| [STATUS.md](STATUS.md) | Live audit: active bugs, pending decisions, resolved items. Evidence-grounded. **Dibaca saat balik ke project setelah jeda.** |
 | [MISSION.md](MISSION.md) | Kenapa project ini ada. North star, dua pilar, roadmap, success metrics, non-goals. **Dibaca pertama.** |
 | [ARCH.md](ARCH.md) | Blueprint fisik: topologi mesin, komponen, context assembly, memory layers, flow per run, deployment via git. |
 | [TLDR.md](TLDR.md) | Prinsip teknis dari Hermes Agent: stateless, cron amnesia, judge konservatif, fallback provider. |
