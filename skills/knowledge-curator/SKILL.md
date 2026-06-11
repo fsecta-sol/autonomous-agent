@@ -90,7 +90,7 @@ For each file in `00-Inbox/_knowledge/`:
 8. **Generate diagram if mechanism warrants one** (see schema section `## Diagram`). Use Mermaid for flow/sequence/state; ASCII for simple stack. Skip only if truly nothing to visualize.
 9. **Include real-world examples for `market` and `applications` layer** (see schema section `## Real-world examples`). Required: named incident + date + quantified impact + source URL. Optional but recommended for other layers.
 10. **Reciprocity check — MANDATORY for new concepts.** Before considering the note complete, scan vault for inbound wikilinks and populate reciprocal sections. See `## Reciprocity rules` below for procedure. A concept with outgoing wikilinks but empty incoming reciprocals is incomplete.
-11. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<original-filename>` after successful processing.
+11. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<basename>.txt` after successful processing. **CRITICAL**: change extension from `.md` to `.txt` during the move. Obsidian indexes `.md` files for the graph view; processed inputs are archives, not knowledge — they must NOT pollute the graph. Use `mv 00-Inbox/_knowledge/foo.md 00-Inbox/_processed/2026-06-11/foo.txt` (extension flip).
 12. **Append to daily log** at `01-Daily/YYYY-MM-DD.md` (create if not exists) — see Daily Log Format below.
 
 After all inputs processed: emit a brief summary (1 paragraph): N inputs processed, M new concepts, K enriched, list any `[NEEDS-*]` flags raised.

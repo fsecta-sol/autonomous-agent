@@ -169,7 +169,7 @@ For each file in `00-Inbox/_projects/`:
 
    This is the same bidirectional consistency rule as knowledge-curator's reciprocity — applied to project↔concept and project↔project links.
 
-9. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<original-filename>`.
+9. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<basename>.txt`. **CRITICAL**: change extension from `.md` to `.txt` during the move. Obsidian indexes `.md` files for the graph view; processed inputs are archives, not knowledge — they must NOT pollute the graph. Use `mv 00-Inbox/_projects/foo.md 00-Inbox/_processed/2026-06-11/foo.txt` (extension flip).
 
 10. **Append to daily log** at `01-Daily/YYYY-MM-DD.md` (create if not exists). See Daily Log Format below.
 
