@@ -171,7 +171,7 @@ For each file in `00-Inbox/_projects/`:
 
 9. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<basename>.txt`. **CRITICAL**: change extension from `.md` to `.txt` during the move. Obsidian indexes `.md` files for the graph view; processed inputs are archives, not knowledge — they must NOT pollute the graph. Use `mv 00-Inbox/_projects/foo.md 00-Inbox/_processed/2026-06-11/foo.txt` (extension flip).
 
-10. **Append to daily log** at `01-Daily/YYYY-MM-DD.md` (create if not exists). See Daily Log Format below.
+10. **Append to daily log** at `01-Daily/YYYY-MM-DD.txt` (create if not exists). See Daily Log Format below.
 
 After all inputs processed: emit a brief summary (1 paragraph): N projects researched, M new project notes, K enriched, list any `[NEEDS-*]` or `[NO-EDGE]` flags raised.
 
@@ -424,7 +424,7 @@ Use status field + daily log mention:
 
 ## Daily log format
 
-Append to `01-Daily/YYYY-MM-DD.md` (create if not exists) under a new section:
+Append to `01-Daily/YYYY-MM-DD.txt` (create if not exists) under a new section:
 
 ```markdown
 ## Project research — <HH:MM> run
