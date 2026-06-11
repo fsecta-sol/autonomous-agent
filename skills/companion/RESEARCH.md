@@ -25,6 +25,69 @@ Breakdown:
 | **PKM + AI** | Meta-category, personal knowledge management dengan LLM |
 | **Conversational memory / session continuity** | Multi-turn context handling |
 
+## Current state audit (snapshot)
+
+Sebelum research diving, baseline: apa yang sudah resolved vs masih open di current system. Hindari research yang chase concerns yang sebenernya udah ke-handle. Update doc ini saat scale berubah (50+ concepts, 10+ projects).
+
+### ✅ Resolved (evidence di current state)
+
+| Concern | Why resolved |
+|---|---|
+| **Concept vs skill overlap** | Skills define HOW (procedural); concepts define WHAT (declarative). No file/rule overlap. |
+| **Reciprocity / graph consistency** | Skill enforce bidirectional links. Audit: 0 dangling refs (post project-name filter). At 18 concepts scale, integrity solid. |
+| **Web fetching reliability (non-Twitter)** | Scrapling + fetch_url.sh verified. Tier 1 covers most, Tier 2 untuk CF Turnstile. |
+| **Auto-curate vs ask-permission** | Design decision dibuat (auto-curate via inbox handoff). Bukan open question. |
+| **Token bloat di idle ticks** | Wake gate pattern. Idle cron = `wakeAgent: false` = 0 tokens. |
+
+### 🟡 Partially mitigated
+
+| Concern | Sekarang | Yang masih open |
+|---|---|---|
+| **Curation tax (auto-create)** | Skills: anti-pattern + reject list + status flags | No periodic quality re-check. At 100+ concepts, drift risk. |
+| **Hallucination prevention** | Skills enforce citation, explicit "no fabrication" rules | No runtime check / eval — depends on agent compliance |
+| **Active consumption / retrieval** | Companion v1 ada (vault lookup grep) | Naive keyword-only, no semantic / hybrid / graph traversal |
+| **Routing project vs concept** | Companion v1 search both 02-Projects/ dan 03-Areas/ | Inbox handoff broken untuk project queries (planned for v2) |
+
+### ❌ Still open (verified absent in current state)
+
+| Concern | Evidence |
+|---|---|
+| **Versioning / temporal knowledge** | 0 concept notes punya `last_verified` / `verified_at` / `stale_after` field. No decay mechanism. |
+| **Embedding-friendly metadata** | 0 concept notes punya `summary` / `keywords` / `centrality` frontmatter. Future RAG/embedding pipeline akan struggle. |
+| **Retrieval quality (semantic)** | Hanya grep + read top matches. No vector / hybrid / re-rank. |
+| **Recency vs durable distinction** | Companion design discussion ada, tapi implementasi nol di v1. |
+| **Multi-modal** | ASCII diagrams only. No image/chart support. (Not blocking) |
+| **Stale knowledge** | No mechanism untuk refresh, mark dirty, auto-deprecate. |
+| **Self-edit hallucination compounding** | Agent enrich existing notes during reciprocity. No review gate. |
+
+### 🟦 Not applicable (intentional design)
+
+| "Concern" | Why N/A |
+|---|---|
+| **Scope mismatch vs Karpathy encyclopedia** | Narrow ke crypto by design. Bukan bug, fitur. |
+| **Cross-corpus federation** | Single-user moat is the point. |
+| **Multi-modal (image)** | ASCII chosen for portability + AI-readability. Not blocking. |
+
+## Revised priority based on audit
+
+Research yang paling impactful (urut ROI untuk current state + near-term scale):
+
+**Priority A — highest impact:**
+1. **Retrieval quality (semantic / hybrid)** — Khoj architecture, Smart Connections embedding. At companion scale, ini bottleneck untuk reply quality.
+2. **Hallucination runtime check** — Anthropic Contextual Retrieval, Self-RAG decision tokens. Critical sebelum companion v2 di-trust at scale.
+
+**Priority B — addresses known gaps:**
+3. **Recency / versioning patterns** — research apakah ada PKM/RAG solution untuk fact-as-of-date, atau open problem.
+4. **Embedding-friendly frontmatter** — cheap schema fix tapi worth tau pattern dari Khoj dulu sebelum commit.
+
+**Priority C — nice-to-have:**
+5. **GraphRAG multi-hop** — relevant nanti pas 50+ concepts ada multi-hop reasoning needs. Sekarang 18 concepts, low impact.
+
+**Skip (not applicable to current scope):**
+- Cross-corpus federation
+- Multi-modal image generation
+- Curation tax mitigation at scale (revisit when 100+ concepts)
+
 ## Keywords untuk Google search
 
 **Primary**:
@@ -110,17 +173,21 @@ Breakdown:
 - Cari: `self-improving knowledge base`
 - Concept related: `machine teaching`
 
-## Research path (urut ROI)
+## Research path (urut ROI — aligned dengan audit priorities)
 
-1. **~2 jam — Khoj deep dive**: Read GitHub README + architecture docs. Mereka udah solve banyak masalah yang lu akan temui (vault sync, multi-source, citation). Lihat what they got right and where they fall short.
+1. **~2 jam — Khoj deep dive** [addresses Priority A1 + A2 + B4]: Read GitHub README + architecture docs. Lihat retrieval strategy (hybrid?), citation/grounding mechanism, frontmatter/metadata schema, multi-source orchestration. Mereka closest analog.
 
-2. **~1 jam — Smart Connections study**: Obsidian-native solution, ekosistemnya ramai. Lihat user feedback (apa yang user complain, apa yang useful).
+2. **~30 menit — Anthropic Contextual Retrieval blog** [addresses Priority A2]: Latest technique untuk reduce hallucination. Quick read, high signal.
 
-3. **~1 jam — Self-RAG / CRAG paper skim**: Pahami self-reflection patterns. Bisa jadi inspiration untuk "vault has answer BUT incomplete" mode.
+3. **~1 jam — Self-RAG / CRAG paper skim** [addresses Priority A2]: Self-reflection patterns. Decision tokens approach worth understanding sebelum companion v2.
 
-4. **~30 menit — GraphRAG blog (Microsoft)**: Lu punya graph structure (wikilinks, layers) — ada teknik leverage itu untuk reasoning yang lu mungkin belum apply.
+4. **~1 jam — Smart Connections study** [addresses Priority A1 + B4]: Obsidian-native, embedding-based. User feedback di GitHub issues + r/ObsidianMD shows pain points.
 
-5. **Ongoing — Twitter follow** dari list di atas. Patterns terbaru biasanya muncul di Twitter dulu sebelum jadi paper/lib.
+5. **~30 menit — Research recency / versioning patterns** [addresses Priority B3]: Google "stale fact LLM", "temporal knowledge base". Mungkin open problem; document state-of-the-art.
+
+6. **~30 menit — GraphRAG blog (Microsoft)** [addresses Priority C5]: Read overview, defer deep dive sampai 50+ concepts.
+
+7. **Ongoing — Twitter follow** dari accounts list. Patterns terbaru biasanya di Twitter dulu sebelum paper/lib.
 
 ## What to look for during research
 
