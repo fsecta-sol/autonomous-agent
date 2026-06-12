@@ -317,15 +317,20 @@ Be specific — vague entries like "innovative consensus" don't help.>
 - <primitive name>: <1-line description from code> — POTENTIAL CONCEPT [layer: <guess>]
 
 ## Advantage framework
-<Answer ALL 5 explicitly. If unclear, say "unclear" — don't invent.>
+<Answer ALL 5 explicitly. If unclear, say "unclear" — don't invent.
+
+Short-circuit rule (IMPORTANT — saves yapping for projects without substantive evidence):
+- If on first pass 3+ answers come back "unclear/no" → DO NOT write all 5 paragraphs. Instead:
+  - State: `[NO-EDGE]` — pattern match it (e.g., "vibes-launch / loot-lineage", "anonymous-narrative / milady-pattern", "fork-of-X with no differentiation")
+  - One sentence on the pattern outcome (e.g., "Pattern typically tops with reveal moment then decays unless ecosystem builds.")
+  - Stop. Move to Comparable projects.
+- If 2 or fewer "unclear/no" → write all 5 paragraphs as before.>
 
 1. **vs status quo**: <incumbent name>. <how this differs concretely>.
 2. **Novel mechanism**: <yes/no>. <if yes: what primitive>.
 3. **Better combination**: <yes/no>. <if yes: which existing [[X]] + [[Y]] combined how>.
 4. **Specialization**: <yes/no>. <if yes: for what use case + how>.
 5. **Trade-offs acknowledged**: <yes/no>. <if yes: what's sacrificed>. <if no: that's a yellow flag>.
-
-[If 3+ answered "unclear/no": project gets `status: needs-edge-analysis` and `[NO-EDGE]` flag in daily log.]
 
 ## Comparable projects
 <Other projects in the same space — peers, competitors, ancestors, parallel attempts.
@@ -338,11 +343,30 @@ Severity: critical | high | medium | low.>
 - <risk>: severity. <1-line why>
 - <risk>: ...
 
-## Catalysts (next 6 months)
-<Concrete events that would change the assessment. With priority.>
-- P0 (highest impact, must-watch): <event>
-- P1: <event>
-- P2: <event>
+## Current state (REQUIRED for tokenized projects)
+<For projects with deployed token(s): the actual now-state on-chain.
+Skip if pre-token / non-tokenized infrastructure project.
+
+Required fields:
+- **Token contract**: <chain>:<address> — verified yes/no
+- **DEX liquidity**: primary pool address + venue (e.g., Uniswap V3 ETH/PRIMA at 0x...). If no pool, write "no DEX liquidity — not yet tradeable" or "OTC only".
+- **Last price**: $X per token (or N tokens per ETH/SOL/etc), as of YYYY-MM-DD HH:MM, source: <DEX or aggregator>
+- **Claimable amount worth** (if mint is live): if user claims max allowed, what's it worth in USD? Compute: `max_per_wallet × price`
+- **Top-10 holder concentration**: % of circulating supply held by top 10 addresses (Etherscan token analytics, Dune query, or Bubblemaps)
+- **Mint status**: open / closed / N% claimed
+- **Trading venues**: list active markets (DEXs first, CEXs if any)
+
+This section is what actually drives "should I claim / trade / monitor / ignore" decisions. Skip the analysis sections and check this first when revisiting a project.>
+
+## What to watch (next 30 days)
+<Concrete imminent signals, not speculative 6-month projections.
+Each entry must be a specific event the user can verify within 30 days.>
+- **<concrete imminent event>** — <how to check + by when>
+- **<another>** — <...>
+
+If no concrete near-term signals exist (true for many vibes-launches),
+write: "No scheduled events visible. Monitor @<twitter> for narrative
+movement; re-evaluate if reagent/audit/listing happens."
 
 ## Sources
 <Detailed list with notes on what was extracted from each.>
@@ -367,6 +391,8 @@ Same layer enum as knowledge-curator skill (for cross-skill consistency):
 When proposing a novel primitive, guess the layer based on what it does, not where in the stack the project sits.
 
 ## Hard rules (non-negotiable)
+
+0. **Calibrate depth to evidence.** Note length must reflect available source depth. Thin sources (no whitepaper + no code repo + no audit) → short note focused on `## Current state` + `## Comparable projects` + 1-paragraph `[NO-EDGE]` pattern match. Substantive sources (deployed code + audits + real team + working product) → full skill (Implementation reality tree, Gap analysis, full Advantage framework). **Padding analytical sections with speculation IS NOT analysis — it's noise.** If sections like Catalysts/Trust model/Failure modes would be repetition of obvious points, omit them.
 
 1. **Code reading mandatory.** Project note shipped based on whitepaper alone is incomplete. If repo is private or unavailable, flag `[NEEDS-CODE]` and explain. Don't fake the implementation reality section.
 
@@ -409,7 +435,8 @@ Update `updated:` in frontmatter to today's date.
 - **Vague novel primitives.** "Innovative consensus" / "advanced mechanism" without specifics = useless. Either name it concretely or omit.
 - **One-way concept links.** Project says "uses [[proof-of-stake]]" but concept note doesn't get implementation backlink = broken graph.
 - **Cherry-picked peers.** Comparing to only weaker peers = bias. Include the strong incumbent (Ethereum for L1s, Uniswap for DEXes, etc.) even if comparison is unfavorable.
-- **Speculative pricing / market commentary.** Project research is about the protocol, not the token. No price predictions. No "TVL will grow to X". Mention tokenomics for trust assessment only.
+- **Speculative pricing / market commentary.** Project research is about the protocol, not the token. No price PREDICTIONS. No "TVL will grow to X". (`## Current state` reports CURRENT price as fact for actionable info — that's different from predicting future price.)
+- **Padding with yapping.** Catalysts that are guesses, trust model paragraphs that restate the risks section, advantage framework that lands `[NO-EDGE]` after 5 paragraphs of analysis. If evidence is thin, the note is short. Length should reflect substance, not effort.
 - **Dismissive nihilism.** "All L1s are the same" or "no project has edge" is intellectually lazy. If true, prove it with the 5-question framework + concrete code observations.
 
 ## When to flag for human review
