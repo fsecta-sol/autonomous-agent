@@ -91,7 +91,41 @@ For each file in `00-Inbox/_projects/`:
    - **If exists:** read it, then enrich (see Enrichment Rules below). Do NOT overwrite. Add what's new.
    - **If new:** create using the Project Note Schema below.
 
-3. **Gather sources.** For each provided URL:
+3. **Classify the project type — STRUCTURAL decision before deep research.**
+
+   Most projects fall into one of three modes. Misclassifying causes either yapping (alpha play written as deep research) or under-investigation (substantive project given the short treatment).
+
+   **Alpha-play signals** (count strong matches):
+   - Anonymous team, no doxxed founders
+   - No whitepaper OR thin lore/philosophical page only
+   - Free or near-free mint/claim mechanism (gas only, airdrop, riddle-gated)
+   - Token age < 30 days (recent deployment)
+   - No public code repo OR repo doesn't match what's deployed
+   - Heavy "vibes" branding (anti-commercial ethos, occult, philosophical, alchemy, etc.)
+   - DEX pool exists but thin liquidity / new market
+   - Promised future drops not yet deployed (reagents, NFTs, additional tokens)
+   - Numerical references to crypto culture (21M Bitcoin mirror, 1111/6666 occult, etc.)
+   - "Burner wallet" recommendation on mint page
+
+   **Substantive-project signals** (count strong matches):
+   - Doxxed team OR credible anon track record
+   - Whitepaper with technical depth (not just lore)
+   - Public code repo with commit history
+   - Audit report from named firm (Trail of Bits, Spearbit, OpenZeppelin, etc.)
+   - VC backing or established research org incubation
+   - Live mainnet with real on-chain activity (TVL, user count, integration partners)
+   - Multiple contracts with novel mechanism (not just standard ERC20)
+   - Roadmap with concrete delivered milestones
+
+   **Branch by classification:**
+
+   - **4+ alpha-play signals** → **ALPHA MODE** — use abbreviated schema (see "Alpha-play schema" below). Focus on Current state + verdict + pattern match. Skip full Implementation reality tree, skip full advantage framework analysis paragraphs.
+   - **4+ substantive signals** → **STANDARD MODE** — full skill workflow (Implementation reality with code tree, full Gap analysis, full Advantage framework, all sections).
+   - **Mixed / unclear (2-3 of each)** → **HYBRID MODE** — Current state mandatory, Implementation reality light (only critical contracts/functions), Advantage framework with short-circuit if [NO-EDGE], skip catalysts speculation.
+
+   Set frontmatter `type:` accordingly (`alpha-play` / `project` / `hybrid`). This drives all downstream decisions.
+
+4. **Gather sources.** For each provided URL:
    - Fetch via Hermes default web tool first.
    - On CF challenge / 403 / 503 / suspicious SPA shell: retry with `bash ~/autonomous-agent/scripts/fetch_url.sh <URL>`.
    - For known-stealth domains (app.*.org, *.app, dashboards): use `bash ~/autonomous-agent/scripts/fetch_url.sh --stealth <URL>` directly.
@@ -102,7 +136,7 @@ For each file in `00-Inbox/_projects/`:
      - If multiple addresses returned (factory, registry, multisig): map the relationship.
    - If no URLs provided at all: actively search for canonical sources (whitelist: paradigm.xyz, flashbots, vitalik.eth.limo, ethresear.ch, audit firms, project's official org). Skip news media unless used as breadcrumb to primary source.
 
-4. **Read code — CRITICAL step, what separates this skill from concept curation.**
+5. **Read code — CRITICAL step (SKIP in ALPHA MODE — replace with quick contract scan via Etherscan: read deployed source, identify owner/admin functions, note any non-standard mechanism. For ALPHA MODE no need for code-tree, no repo clone).** What separates this skill from concept curation.
 
    For repos, use the terminal tool:
    ```bash
@@ -140,9 +174,12 @@ For each file in `00-Inbox/_projects/`:
 
    Concrete comparison method: locate the contract file in GitHub by matching contract name from explorer, then diff key functions (constructor, admin functions, core logic). Don't full-text diff (compiler artifacts differ); focus on semantic divergence — different function signatures, missing functions, additional admin powers in deployed version. Material divergences go into `## Gap analysis` with severity tag.
 
-5. **Synthesize per Project Note Schema** (see below). Fill each section based on what you read.
+6. **Synthesize per Project Note Schema** (see below).
+   - **STANDARD MODE**: full Project Note Schema (all sections).
+   - **HYBRID MODE**: Identity, Core claim (1-paragraph), Implementation reality (only critical contracts), Current state, Gap analysis, Underlying mechanisms, Advantage framework (short-circuit if [NO-EDGE]), Comparable projects, Risks (3-bullet max), What to watch, Sources, Notes. Skip "How it works" full diagram unless mechanism is genuinely novel.
+   - **ALPHA MODE**: see "Alpha-play schema" section below. Much shorter: TLDR + Current state + Pattern signals matched + Time window + Risk floor + Pattern reference + Notes. Skip Implementation reality tree, How it works full diagram, Gap analysis (just inline in Current state), Underlying mechanisms (skip unless 1-2 obvious), Novel primitives (almost always "none" for alpha), full Advantage framework.
 
-6. **Advantage framework — answer all 5 questions EXPLICITLY** (in the `## Advantage framework` section):
+7. **Advantage framework — answer all 5 questions EXPLICITLY** (in the `## Advantage framework` section):
    1. **vs status quo** — Is this better/different than the incumbent solving the same problem? Name the incumbent.
    2. **Novel mechanism** — Does code introduce a primitive not in `03-Areas/concepts/`? Name it.
    3. **Better combination** — Are known concepts combined in an unusual way? Show the combination.
@@ -151,12 +188,12 @@ For each file in `00-Inbox/_projects/`:
 
    If 3+ unclear/none → flag the project note with `status: needs-edge-analysis` AND add `[NO-EDGE]` in daily log. The project might still be tracked, but treated as "marketing claims unsubstantiated."
 
-7. **Graph integration — link concepts and peer projects.**
+8. **Graph integration — link concepts and peer projects.**
    - For each concept this project uses (PoS, MEV, AMM, account-abstraction, etc.): add to `## Underlying mechanisms` with how this project uses it / with what variant.
    - For each novel primitive observed in code that's not yet a concept note: add to `## Novel primitives` with brief description (graph-walker may pick these up next run).
    - For each peer/competitor project: add to `## Comparable projects` with relation type.
 
-8. **Reciprocity check — MANDATORY.**
+9. **Reciprocity check — MANDATORY.**
 
    For each `[[concept]]` link in this project's `## Underlying mechanisms`:
    - Open `03-Areas/concepts/<concept>.md`
@@ -169,9 +206,9 @@ For each file in `00-Inbox/_projects/`:
 
    This is the same bidirectional consistency rule as knowledge-curator's reciprocity — applied to project↔concept and project↔project links.
 
-9. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<basename>.txt`. **CRITICAL**: change extension from `.md` to `.txt` during the move. Obsidian indexes `.md` files for the graph view; processed inputs are archives, not knowledge — they must NOT pollute the graph. Use `mv 00-Inbox/_projects/foo.md 00-Inbox/_processed/2026-06-11/foo.txt` (extension flip).
+10. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<basename>.txt`. **CRITICAL**: change extension from `.md` to `.txt` during the move. Obsidian indexes `.md` files for the graph view; processed inputs are archives, not knowledge — they must NOT pollute the graph. Use `mv 00-Inbox/_projects/foo.md 00-Inbox/_processed/2026-06-11/foo.txt` (extension flip).
 
-10. **Append to daily log** at `01-Daily/YYYY-MM-DD.txt` (create if not exists). See Daily Log Format below.
+11. **Append to daily log** at `01-Daily/YYYY-MM-DD.txt` (create if not exists). See Daily Log Format below.
 
 After all inputs processed: emit a brief summary (1 paragraph): N projects researched, M new project notes, K enriched, list any `[NEEDS-*]` or `[NO-EDGE]` flags raised.
 
@@ -377,6 +414,90 @@ movement; re-evaluate if reagent/audit/listing happens."
 Hot takes that the formal sections above can't accommodate.
 Empty is OK if no perspective yet — better empty than padded.>
 ```
+
+## Alpha-play schema (when classification step set `type: alpha-play`)
+
+Shorter, action-first schema. Most analytical sections from Project Note Schema are SKIPPED. Total note typically 40-80 lines, not 200+.
+
+```markdown
+---
+project: <slug>
+type: alpha-play
+category: <free-mint | airdrop | hidden-allocation | riddle-claim | low-cost-mint | other>
+status: <window-open | window-closing | window-closed | claimed-and-traded | abandoned>
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+deployment_date: YYYY-MM-DD
+sources:
+  homepage: <url>
+  twitter: @<handle>
+  other: [<urls>]
+contracts:
+  - chain: <chain>
+    address: <ca>
+    role: <token | mint | nft | claim>
+    verified: <true | false>
+---
+
+## TLDR
+<1-2 sentence verdict + immediate action.
+Format: "<What it is>. <Verdict: claim / trade / monitor / skip / missed window>. <Why.>"
+Example: "Free ERC-20 mint with claimable allocation of 10K PRIMA per wallet (~$6.50 at current Uniswap price). Already 100% claimed; secondary market trading. SKIP — alpha window closed. Monitor for promised reagent NFT drops.">
+
+## Current state
+<Mandatory section — see schema definition in Project Note Schema above.
+For alpha plays this is THE section that drives action. Include:
+- Token contract: <chain>:<address> — verified yes/no
+- DEX liquidity: <primary pool address + venue>, $X TVL
+- Last price: <$X per token>, source <DEX/aggregator>, as of <YYYY-MM-DD HH:MM>
+- Claimable amount worth: max_per_wallet × price = $X
+- Top-10 holder concentration: X%
+- Mint status: open / closed (N% claimed) / not yet live
+- Trading venues: <list>>
+
+## Alpha pattern signals matched
+<List from classification step 3. Show what made this classify as alpha.>
+- ✅ Anonymous team
+- ✅ Free mint mechanism
+- ✅ No code repo public
+- ✅ Heavy vibes branding
+- ❌ DEX pool exists (this isn't matched if no pool — adjust accordingly)
+- (etc.)
+
+## Time window
+<Window for action, with specific deadlines if available.>
+- Mint deadline: <date or "N% remaining">
+- Reagent drops promised: <if any timeline visible>
+- Claim expiration: <if relevant>
+- Estimated decay timeline: <when does this typically stop being alpha? — usually within 30-60 days of launch unless ecosystem builds>
+
+## Risk floor (max 3 bullets)
+<Specific to alpha plays — not generic crypto risks.>
+- **Rug surface**: <code-verified standard ERC20 / unverified bytecode / custom mechanism / etc>
+- **Owner control**: <what owner can do bad, mitigated/unmitigated>
+- **Honeypot / sell-side**: <can you actually sell? — verify by simulating a swap on DEX>
+
+## Pattern reference
+<Link to concept patterns in graph + 1-2 precedents.>
+- Pattern: [[<vibes-launch | free-mint | anonymous-narrative | airdrop-claim>]] (concept in graph)
+- Closest precedent: <Loot / Milady / specific project> — <typical outcome: tops at launch, fades; or compounds via ecosystem; etc.>
+
+## Sources
+<Brief — focus on on-chain + DEX + Twitter. Skip whitepaper section since usually none exists.>
+- <Etherscan token page URL> — type: on-chain contract — extracted: <what>
+- <DEX pool URL> — type: liquidity — extracted: <what>
+- <Twitter URL> — type: social — extracted: <signal>
+
+## Notes
+<Personal framing. What makes this alpha vs not for YOU.
+- "Worth claiming via burner: yes/no, because <reason>"
+- "Skip because: <reason>"
+- "Missed but worth monitoring: <reason>"
+Empty is OK if straightforward.>
+```
+
+**Alpha mode summary message format** (for daily log):
+> "1 input → 1 alpha-play (lapis). Verdict: <verdict>. Pattern: <pattern>. Current state: <price + claimable worth>. [NO-EDGE flag standard for alpha plays.]"
 
 ## Layer Taxonomy (for `## Novel primitives` layer guess)
 
