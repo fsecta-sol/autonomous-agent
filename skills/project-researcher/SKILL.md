@@ -455,6 +455,18 @@ For alpha plays this is THE section that drives action. Include:
 - Mint status: open / closed (N% claimed) / not yet live
 - Trading venues: <list>>
 
+## Underlying mechanisms
+<MANDATORY even in alpha mode — graph integrity requires bidirectional edges.
+If you reference [[concept]] in concept's body during reciprocity check, this
+note MUST reciprocate. Otherwise the project appears isolated in graph view.
+
+Keep it brief in alpha mode (1-3 concepts max, ~1 sentence each) — skip the
+deeper "how it implements with what variant" prose used in standard mode.
+For alpha plays this is usually [[narrative-cycle]] + [[reflexivity]] +
+maybe one more.>
+- [[<concept>]] — <how this project leverages it, 1 sentence>
+- [[<concept>]] — <...>
+
 ## Alpha pattern signals matched
 <List from classification step 3. Show what made this classify as alpha.>
 - ✅ Anonymous team
