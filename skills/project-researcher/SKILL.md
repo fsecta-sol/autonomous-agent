@@ -343,7 +343,21 @@ note the team's framing.>
 
 ## Underlying mechanisms
 <Concepts from `03-Areas/concepts/` that this project uses.
-Each link must have a "what variant / how used" sentence.>
+Each link must have a "what variant / how used" sentence.
+
+**MECHANISMS ONLY — NOT chain/project names.** Per knowledge-curator Hard
+Rule #4 (commit 13cbe03), chain/project names (`ethereum`, `base`, `solana`,
+`uniswap`, etc.) are NOT concepts. They live at `02-Projects/<slug>.md`,
+not `03-Areas/concepts/`. Linking `[[ethereum]]` here creates a stub edge to
+a node that should not exist as a concept.
+
+Correct mapping when project depends on a chain:
+- Chain's substrate role → link the MECHANISM the chain provides
+  (`[[smart-contracts]]` for ERC-20 deployment, `[[pbs]]` for block-building,
+  `[[mev]]` for ordering surface, `[[proof-of-stake]]` for consensus security)
+- Chain itself as host context → `## Comparable projects` (peer/parent) or
+  TLDR/Current state mention. Alpha schema skips Comparable projects — chain
+  context goes in TLDR.>
 - [[concept-slug]] — how this project uses it / with what variant
 - [[other-concept]] — ...
 
@@ -460,10 +474,19 @@ For alpha plays this is THE section that drives action. Include:
 If you reference [[concept]] in concept's body during reciprocity check, this
 note MUST reciprocate. Otherwise the project appears isolated in graph view.
 
-Keep it brief in alpha mode (1-3 concepts max, ~1 sentence each) — skip the
+**MECHANISMS ONLY — NOT chain/project names.** See full rule in standard schema
+above. Tokenized alpha play on Ethereum links `[[smart-contracts]]` (ERC-20
+substrate) + `[[amm]]` (DEX exit surface), NOT `[[ethereum]]`. Chain context
+goes in TLDR/Current state.
+
+Keep it brief in alpha mode (2-4 concepts max, ~1 sentence each) — skip the
 deeper "how it implements with what variant" prose used in standard mode.
-For alpha plays this is usually [[narrative-cycle]] + [[reflexivity]] +
-maybe one more.>
+Typical alpha play composition:
+- Substrate mechanism: `[[smart-contracts]]` (if ERC-20/SPL standard) or
+  specific protocol concept (e.g., `[[amm]]` for Uniswap-launched)
+- Pattern mechanism: `[[narrative-cycle]]` (for vibes/lore launches),
+  `[[reflexivity]]` (for belief-driven dynamics)
+- Optional: any additional concept the project genuinely leverages.>
 - [[<concept>]] — <how this project leverages it, 1 sentence>
 - [[<concept>]] — <...>
 
@@ -546,6 +569,8 @@ When proposing a novel primitive, guess the layer based on what it does, not whe
 9. **Implementation reality uses tree format.** The `## Implementation reality` section's "Entry points read" list MUST be formatted as a markdown directory tree (box-drawing chars `├── │ └──`) mirroring the actual repo structure, not a flat bullet list. Readers should be able to navigate the repo's organization at a glance.
 
 10. **How it works section required.** Every project note MUST include `## How it works` with an ASCII pipe-flow diagram + 2-4 explanatory paragraphs (operational flow, trust model, failure modes). The diagram makes abstract mechanism / risk discussions concrete. If the project is too thin to diagram (e.g., pre-launch with no operational flow), state that explicitly: "No operational flow yet — pre-launch / vaporware."
+
+11. **No chain/project names in `## Underlying mechanisms`.** Per knowledge-curator Hard Rule #4 (commit 13cbe03), chain and project names (`ethereum`, `base`, `solana`, `arbitrum`, `uniswap`, `aave`, etc.) are NOT concepts — they live at `02-Projects/<slug>.md`, not `03-Areas/concepts/`. Linking `[[ethereum]]` from a project's Underlying mechanisms creates a stub edge to a node that should not exist as a concept. When project depends on a chain, link the MECHANISM that chain provides (`[[smart-contracts]]`, `[[pbs]]`, `[[mev]]`, `[[proof-of-stake]]`). Chain itself as host context → `## Comparable projects` (parent/peer chain) in standard/hybrid mode, or TLDR/Current state in alpha mode. **Violation example:** lapis.md (PRIMA on Ethereum) → WRONG: `[[ethereum]]` in Underlying mechanisms. RIGHT: `[[smart-contracts]]` (ERC-20 substrate) + `[[amm]]` (Uniswap exit) + project-specific concepts.
 
 ## Enrichment rules (when project note already exists)
 
