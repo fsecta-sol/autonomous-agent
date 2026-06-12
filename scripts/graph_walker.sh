@@ -24,15 +24,42 @@ CONCEPTS="$VAULT/03-Areas/concepts"
 # IMPORTANT: keep this list in sync with skills/knowledge-curator/SKILL.md
 PROJECT_NAMES_REGEX='^(bitcoin|ethereum|solana|avalanche|polygon|base|arbitrum|optimism|monad|sui|aptos|near|tempo|unichain|scroll|zksync|starknet|linea|mantle|blast|world-chain|uniswap|aerodrome|curve|balancer|pancakeswap|sushiswap|raydium|orca|aave|compound|morpho|spark|kamino|maker|frax|circle|tether|lido|rocket-pool|eigenlayer|etherfi|kelp|chainlink|pyth|redstone|wormhole|layerzero|hyperlane|axelar|metamask|coinbase|flashbots|mev-boost|suave|shutter)$'
 
-# Extract all [[wikilinks]] from concept notes; find which target concepts
-# don't yet have files (= dangling refs). Project-named refs are filtered
-# out before passing to the agent.
+# Extract all [[wikilinks]] from BOTH concept notes AND project notes, then
+# find which target concepts have no file yet (= dangling refs). Scanning
+# project notes too is essential: a project note (e.g. 02-Projects/base.md)
+# references concepts like [[rollup]]/[[sequencer]]/[[bridge]]/[[fraud-proofs]]
+# and the [[l1-blockchain]] archetype — if we only scanned concepts/, those
+# project-originated dangling refs would never be created (this was the bug
+# that left rollup/sequencer/bridge/fraud-proofs dangling). The `sed '#^.*/##'`
+# strips any path-style link prefix (e.g. [[02-Projects/lapis]] -> lapis).
+# A ref is dangling only if it has no file in concepts/ AND no project note.
+# Project-named refs are still filtered out before the agent (PROJECT_NAMES_REGEX).
+PROJECTS="$VAULT/02-Projects"
+
+# From CONCEPT notes: scan the whole file (every link is a concept-graph edge).
+# From PROJECT notes: scan ONLY the concept-bearing sections — `## Underlying
+# mechanisms` and `## Category / Archetype`. We deliberately EXCLUDE
+# `## Comparable projects` (those refs are peer PROJECTS, not concepts —
+# e.g. [[bnb-chain]], [[zora]] — and must never be created as concept notes).
+# This is more robust than relying on PROJECT_NAMES_REGEX to catch every peer
+# chain, since that blacklist can never be exhaustive.
+project_concept_links() {
+  awk '
+    FNR==1 { insec=0 }
+    /^## / { insec = ($0 ~ /^## (Underlying mechanisms|Category \/ Archetype)/) ? 1 : 0; next }
+    insec { print }
+  ' "$PROJECTS"/*.md 2>/dev/null
+}
+
 ALL_DANGLING=$(
-  grep -ohE '\[\[[^]|]+(\|[^]]+)?\]\]' "$CONCEPTS"/*.md 2>/dev/null \
+  { grep -ohE '\[\[[^]|]+(\|[^]]+)?\]\]' "$CONCEPTS"/*.md 2>/dev/null
+    project_concept_links | grep -ohE '\[\[[^]|]+(\|[^]]+)?\]\]'
+  } \
     | sed -E 's/\[\[([^]|]+)(\|[^]]+)?\]\]/\1/' \
+    | sed -E 's#^.*/##' \
     | sort -u \
     | while read -r slug; do
-        if [ -n "$slug" ] && [ ! -f "$CONCEPTS/$slug.md" ]; then
+        if [ -n "$slug" ] && [ ! -f "$CONCEPTS/$slug.md" ] && [ ! -f "$PROJECTS/$slug.md" ]; then
           echo "$slug"
         fi
       done

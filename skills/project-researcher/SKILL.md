@@ -204,7 +204,12 @@ For each file in `00-Inbox/_projects/`:
    - Open `02-Projects/<peer-project>.md` (if exists)
    - Add reciprocal entry in its `## Comparable projects` section.
 
-   This is the same bidirectional consistency rule as knowledge-curator's reciprocity — applied to project↔concept and project↔project links.
+   For the `[[archetype]]` link in this project's `## Category / Archetype`:
+   - Open `03-Areas/concepts/<archetype>.md` (e.g. `l1-blockchain.md`, `rollup.md`)
+   - In its body, add or enrich an `## Instances` section (create if doesn't exist) with: `- [[<this-project>]] — <variant: consensus / proof system / what it specializes for>`
+   - If the archetype concept does not exist yet, flag it in `## Novel primitives` as POTENTIAL CONCEPT so graph-walker creates it; do NOT leave a dangling `[[archetype]]` with no reciprocal.
+
+   This is the same bidirectional consistency rule as knowledge-curator's reciprocity — applied to project↔concept, project↔project, and project↔archetype links.
 
 10. **Move input file** to `00-Inbox/_processed/YYYY-MM-DD/<basename>.txt`. **CRITICAL**: change extension from `.md` to `.txt` during the move. Obsidian indexes `.md` files for the graph view; processed inputs are archives, not knowledge — they must NOT pollute the graph. Use `mv 00-Inbox/_projects/foo.md 00-Inbox/_processed/2026-06-11/foo.txt` (extension flip).
 
@@ -238,6 +243,20 @@ contracts:
 
 ## Identity
 <2-3 sentences. What it IS, not what it CLAIMS. No marketing fluff.>
+
+## Category / Archetype
+<The architectural archetype this project instantiates — the "is-a" edge that
+connects this project to the concept graph's category node. Link the archetype
+CONCEPT (not the chain it runs on). This is what makes "all L1s" / "all rollups"
+navigable hubs in the graph.
+
+- For an L1 chain: `[[l1-blockchain]]` — is-a. <how it instantiates: consensus, what it sacrifices>
+- For an L2 / rollup: `[[rollup]]` (or `[[optimistic-rollup]]` / `[[zk-rollup]]`) — is-a. <settles to which L1, proof system>
+- For other categories: link the closest archetype concept if one exists; if none exists, note it in `## Novel primitives` as a POTENTIAL CONCEPT for graph-walker.
+
+Reciprocity: the archetype concept MUST list this project in its `## Instances`
+section (see Reciprocity check step). Forward-only is incomplete.>
+- [[<archetype-concept>]] — is-a. <1 sentence on how this project instantiates the archetype>
 
 ## Core claim
 <Verbatim or close paraphrase of what the project claims to be/do, from
@@ -571,6 +590,8 @@ When proposing a novel primitive, guess the layer based on what it does, not whe
 10. **How it works section required.** Every project note MUST include `## How it works` with an ASCII pipe-flow diagram + 2-4 explanatory paragraphs (operational flow, trust model, failure modes). The diagram makes abstract mechanism / risk discussions concrete. If the project is too thin to diagram (e.g., pre-launch with no operational flow), state that explicitly: "No operational flow yet — pre-launch / vaporware."
 
 11. **No chain/project names in `## Underlying mechanisms`.** Per knowledge-curator Hard Rule #4 (commit 13cbe03), chain and project names (`ethereum`, `base`, `solana`, `arbitrum`, `uniswap`, `aave`, etc.) are NOT concepts — they live at `02-Projects/<slug>.md`, not `03-Areas/concepts/`. Linking `[[ethereum]]` from a project's Underlying mechanisms creates a stub edge to a node that should not exist as a concept. When project depends on a chain, link the MECHANISM that chain provides (`[[smart-contracts]]`, `[[pbs]]`, `[[mev]]`, `[[proof-of-stake]]`). Chain itself as host context → `## Comparable projects` (parent/peer chain) in standard/hybrid mode, or TLDR/Current state in alpha mode. **Violation example:** lapis.md (PRIMA on Ethereum) → WRONG: `[[ethereum]]` in Underlying mechanisms. RIGHT: `[[smart-contracts]]` (ERC-20 substrate) + `[[amm]]` (Uniswap exit) + project-specific concepts.
+
+**Archetype is the ONE allowed category-link, and it lives in `## Category / Archetype`, not Underlying mechanisms.** When the project IS a chain, link its architectural archetype CONCEPT there: an L1 → `[[l1-blockchain]]`, a rollup → `[[rollup]]` (or `[[optimistic-rollup]]`/`[[zk-rollup]]`). This is a category noun (valid concept), not the chain product name. Still never link a specific peer chain (`[[ethereum]]`, `[[solana]]`) as a "mechanism" — peers go in `## Comparable projects`, the archetype goes in `## Category / Archetype`, and the mechanisms the chain provides go in `## Underlying mechanisms`. (Alpha plays usually have no architectural archetype — skip the section; their pattern concept like `[[vibes-launch]]` already sits in Underlying mechanisms.)
 
 ## Enrichment rules (when project note already exists)
 

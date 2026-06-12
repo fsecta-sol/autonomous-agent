@@ -148,12 +148,12 @@ hermes cron list
 
 ### graph_walker.sh
 
-1. `grep -ohE '\[\[[^]|]+(\|[^]]+)?\]\]'` — extract semua wikilink dari semua concept .md
-2. `sed` strip `[[ ]]` wrapper dan `|alias` suffix
-3. Untuk tiap unique slug, cek apakah `concepts/<slug>.md` exists
-4. Hitung yang non-existent (dangling)
-5. 0 dangling → output `{"wakeAgent": false}` → agent skip
-6. ≥1 dangling → output "Dangling concept refs detected: <list>" → agent invoked, picks deepest from list
+1. Extract semua `[[wikilink]]` dari **dua sumber**: (a) semua `03-Areas/concepts/*.md` (full file), dan (b) `02-Projects/*.md` tapi HANYA section `## Underlying mechanisms` + `## Category / Archetype` (section concept-bearing). Section `## Comparable projects` di project notes **di-skip** — isinya peer project (mis. `[[bnb-chain]]`, `[[zora]]`), bukan concept, jadi tidak boleh jadi kandidat concept. Scanning project notes ini penting: ref concept yang lahir dari project (mis. base.md → `[[rollup]]`/`[[bridge]]`) dulu tak pernah terdeteksi karena walker cuma lihat concepts/ — itu bug yang bikin rollup/sequencer/bridge/fraud-proofs dangling.
+2. `sed` strip `[[ ]]` wrapper, `|alias` suffix, dan path prefix (mis. `[[02-Projects/lapis]]` → `lapis`)
+3. Untuk tiap unique slug, ref dianggap dangling kalau **tidak ada** `concepts/<slug>.md` DAN tidak ada `02-Projects/<slug>.md` (ref ke project yang sudah ada bukan dangling)
+4. Partition: slug yang match `PROJECT_NAMES_REGEX` (nama chain/produk) → di-route ke stderr sebagai "drop ke _projects/", sisanya = concept-candidate. Archetype (`l1-blockchain`, `rollup`, `bridge`, `sequencer`, `fraud-proofs`) sengaja TIDAK di blacklist → lolos sebagai concept (sesuai knowledge-curator Hard Rule #4 ARCHETYPE EXCEPTION).
+5. 0 concept-candidate → output `{"wakeAgent": false}` → agent skip
+6. ≥1 → output "Dangling concept refs detected: <list>" → agent invoked, picks deepest from list
 
 **Edge case:** kalau concepts/ kosong (graph baru), grep return empty, dangling count = 0 → no walk. Skill akan idle sampai user drop input pertama via inbox.
 

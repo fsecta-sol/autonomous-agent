@@ -100,6 +100,7 @@ After all inputs processed: emit a brief summary (1 paragraph): N inputs process
 ```markdown
 ---
 concept: <slug>
+type: <fundamental | system | programming | blockchain | concept | economy | trading | cross-cutting>
 layer: <one of: cryptography | foundations | platforms | applications | market | cross-cutting>
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
@@ -222,6 +223,23 @@ Choose exactly one layer per concept. If you cannot decide between two, the conc
 | `market` | Where value moves | reflexivity, fee-market-dynamics, mev, narrative-cycle, memecoin-mania |
 | `cross-cutting` | Touches multiple layers | game-theory, incentive-design, monetary-policy, network-effects |
 
+## Type Taxonomy (graph category — the `type:` field)
+
+`layer` is the **structural** axis (it governs Builds on / Enables link discipline — see Hard Rule #1). `type` is the **graph category** axis: it is the user-facing vocabulary used to color nodes in Obsidian's graph view and to browse the vault by domain. Both fields are required; they are not redundant — one is for link discipline, the other for categorization. Set `type` from the note's domain, mapping from layer as a default:
+
+| `type` | Domain | Default `layer` source | Examples |
+|---|---|---|---|
+| `fundamental` | crypto + consensus primitives | cryptography, foundations | hash-function, digital-signature, proof-of-work, proof-of-stake, validator-set |
+| `system` | infra / architecture components | platforms (infra), foundations | mempool, tx-propagation, block-production, pbs, encrypted-mempool, sequencer, bridge, fraud-proofs |
+| `programming` | dev / execution / contracts | platforms (execution) | smart-contracts, account-abstraction |
+| `blockchain` | chain **archetypes** (NOT specific chains) | foundations / platforms | l1-blockchain, rollup, optimistic-rollup, zk-rollup |
+| `concept` | application-layer mechanisms | applications | amm, dex-routing |
+| `economy` | monetary / fee / token economics | market | fee-market-dynamics, reflexivity |
+| `trading` | market / narrative dynamics | market | mev, narrative-cycle, vibes-launch |
+| `cross-cutting` | spans layers | cross-cutting | game-theory, incentive-design |
+
+**The `blockchain` archetype type is the bridge between concepts and projects.** A concept like `l1-blockchain` or `rollup` describes the *category* (what defines an L1, its trade-offs, trust model); the specific chains that instantiate it (`bitcoin`, `ethereum`, `base`) live as project notes and link UP to the archetype via the project-researcher skill's `## Category / Archetype` section. The archetype concept lists those projects in its own `## Instances` section. This is what makes "all L1s" a single navigable hub in the graph.
+
 ## Hard rules (non-negotiable)
 
 1. **Vertical link mandatory.** Every concept note has at least one `Builds on` (link to lower layer) or `Enables` (link to upper layer) — except `cryptography` (which only has `Enables`) and `market` (which only has `Builds on`). `cross-cutting` must link to at least 2 different layers.
@@ -239,6 +257,8 @@ Choose exactly one layer per concept. If you cannot decide between two, the conc
    - Bridges: `wormhole`, `layerzero`, `hyperlane`, `axelar`
    - Infrastructure / wallets: `metamask`, `coinbase`, `flashbots`
    - MEV-specific: `mev-boost`, `suave`, `shutter` (the *protocols* — but `pbs` and `encrypted-mempool` ARE valid concepts because they describe mechanisms)
+
+   **ARCHETYPE EXCEPTION (important — this is a category noun, not a product noun).** A *specific chain* is a project and is rejected (`ethereum`, `bitcoin`, `base`, `arbitrum`, `solana`). But the *architectural archetype* that a chain instantiates IS a valid concept, because it names a mechanism-category, not a deployment. Valid archetype/mechanism concepts: `l1-blockchain`, `rollup`, `optimistic-rollup`, `zk-rollup`, `bridge`, `sequencer`, `fraud-proofs` (these describe what a class of system IS and how it works). The test: `ethereum` answers "which product?" → REJECT; `l1-blockchain` answers "what kind of thing is it?" → ACCEPT (`type: blockchain`). Likewise `wormhole` (product) → REJECT, but `bridge` (mechanism) → ACCEPT (`type: system`). Specific chains link UP to these archetype concepts from their project notes; do not create concept notes named after the chains themselves.
 
    **Decision procedure:** before writing any concept note, ask "is this a noun for a *mechanism*/*idea*/*dynamic*, or a noun for a *product*/*deployment*?" Only the former qualifies. If unclear, default to REJECT and flag `[REJECT-PROJECT]` in daily log with the slug and reasoning. User can manually route to project-researcher skill if appropriate.
 
