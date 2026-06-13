@@ -2,7 +2,7 @@
 
 Live audit of system state — what works, what's broken, what's pending. Update when state changes; ground every entry in verified evidence (log line, file check, command output). Avoid speculation.
 
-**Last snapshot**: 2026-06-11
+**Last snapshot**: 2026-06-13
 
 ---
 
@@ -44,12 +44,10 @@ Live audit of system state — what works, what's broken, what's pending. Update
 
 ## 🟡 Pending decisions
 
-### 5. `process-inbox-projects` cron job
-**State**: Skill `project-researcher` deployed & symlinked. Manual `hermes -z` trigger works (Base tested successfully). No cron job for auto-process.
-
-**Decision needed**: Auto-process via cron (every 4-6h with wake gate script), or stay manual until pattern stabilizes?
-
-**Last guidance**: User leaned "manual dulu sampai pattern jelas" — still valid?
+### 5. `process-inbox-projects` cron job — ✅ RESOLVED 2026-06-13
+**Decision**: User chose "build permanent cron" (symmetric to `process-inbox-knowledge`).
+**Built**: `scripts/process_projects.sh` (wake-gate, drains `00-Inbox/_projects/`) + cron `process-inbox-projects` (`*/30 * * * *`, skill `project-researcher`, deliver `telegram:...:3`). Thin wrapper at `~/.hermes/scripts/`.
+**Verified**: triggered for `solana` → `02-Projects/solana.md` created (235 lines, full schema, `[[l1-blockchain]]` archetype + reciprocity). Now `_knowledge` AND `_projects` both auto-drain. See `## Update 2026-06-13`.
 
 ### 6. Companion v2 research phase
 **State**: `skills/companion/RESEARCH.md` documents roadmap (5h reading, priorities A/B/C). Research not started.
@@ -72,10 +70,18 @@ Live audit of system state — what works, what's broken, what's pending. Update
 **Evidence**: User test output: `# graph_walker: filtered out project-name dangling refs (not concepts): - base` and `{"wakeAgent": false}`. Script filter blocks project names from agent invocation.
 
 ### 10. Reciprocity / 0 dangling refs (current scale)
-**Evidence**: Audit grep across `03-Areas/concepts/*.md` — 0 dangling wikilinks (post-filter). At 18 concepts scale, graph integrity solid.
+**Evidence**: Graph now **43 concepts, 5 projects** (was 18 concepts). Remaining dangling = unresearched peer chains (solana→Comparable, arbitrum/optimism/etc.) + 2 new from the solana run (`bpf-runtime`, `turbine`) pending `graph-walker`. Core structure 0-dangling. Graph-walker now scans project notes too (was concepts-only — the bug that left rollup/sequencer/bridge dangling).
 
-### 11. Cron jobs healthy
-**Evidence**: `hermes cron list` — `process-inbox-knowledge` last run 2026-06-11 18:00, status "ok". `graph-walker` last run same, status "ok".
+### 11. Cron jobs healthy — **4 crons now** (was 2)
+**Evidence**: `hermes cron list` (2026-06-13):
+| Cron | Schedule | Skill | Script |
+|---|---|---|---|
+| `process-inbox-knowledge` | `*/30 * * * *` | knowledge-curator | process_inbox.sh |
+| `process-inbox-projects` | `*/30 * * * *` | project-researcher | process_projects.sh |
+| `graph-walker` | `0 */6 * * *` | knowledge-curator | graph_walker.sh |
+| `scan-curated-sources` | `0 6 * * *` | curator-triage | scan_sources.sh |
+
+All deliver to `telegram:-1003928226918:3`. All wake-gated (skip LLM when no work). Last runs ok.
 
 ### 12. Skill symlinks intact
 **Evidence**: `ls -la ~/.hermes/skills/` shows symlinks for `companion`, `knowledge-curator`, `project-researcher` all pointing to repo.
@@ -112,6 +118,19 @@ Live audit of system state — what works, what's broken, what's pending. Update
 **Background work**:
 5. Companion v2 research phase per `skills/companion/RESEARCH.md` (#6)
 6. Decision on `process-inbox-projects` cron (#5)
+
+---
+
+## Update 2026-06-13
+
+Big session — graph restructure + 2 new subsystems. Diff:
+
+- **Vault graph restructure** (commit 92ebc6e): unified `type` taxonomy on concepts + **archetype concepts** (`l1-blockchain`, `rollup`) that projects instance-link to. `bitcoin`/`ethereum`/`solana` now all appear under `l1-blockchain`'s `## Instances` (the "L1 Blockchain as a node" the user wanted). knowledge-curator + project-researcher skills updated to enforce it (archetype exception to Hard Rule #4; `## Category / Archetype` section + archetype reciprocity).
+- **Active-scan subsystem (Mesin 1, FASE 2)** (commits 5df4d6d/00c4f53 + bugfixes): `scan-curated-sources` cron + `scan_sources.sh`/`parse_feed.py` (wake-gate, 14 verified DeFi-mechanism feeds, seen-ledger) + new `curator-triage` skill (mechanism-vs-noise gate → drop seed to `_knowledge/`). **End-to-end verified**: 3 ethresear items → 3 concepts (`mev-preconditions`, `post-quantum-signatures`, `consensus-weight-decay`) via scan→triage→curate. Design doc: `ARCH-defi-alpha.md`.
+- **`process-inbox-projects` cron** (commit 277e434): resolves pending #5. Solana researched → `02-Projects/solana.md`.
+- **Graph grew 18 → 43 concepts, 5 projects.** Added Solana mechanism cluster (proof-of-history, sealevel, account-model, spl-token, clob, bonding-curve, memecoin) + DeFi cluster (oracle, lending-protocol, liquidation, stablecoin, data-availability, merkle-tree, zk-proof, erc-20, nft).
+- **Bugs fixed**: (a) knowledge-curator **skill collision** — nested `knowledge-curator/knowledge-curator/SKILL.md` cruft kept getting recreated in a loop (ambiguity → `skill_view` fails → agent `skill_manage create` → recreates); deleted, loop broken. (b) **Root 0-byte ghosts** (`lapis.md`, `solana.md` at vault root) — Obsidian creates an empty note at the default location (vault root) when an unresolved `[[link]]` is clicked during the window before the target note exists. Deleted both; self-resolves once target exists. Prevention: set Obsidian "default location for new notes" off vault-root.
+- **Still open**: companion routing (#3) now has a real `_projects/` target (project cron exists) but skill still unpatched; fallback provider (#2/#7) still deferred.
 
 ---
 

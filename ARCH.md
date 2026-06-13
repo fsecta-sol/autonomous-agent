@@ -241,12 +241,14 @@ Tiap kali job fire, Hermes merakit "prompt akhir" dari beberapa lapis. Urutannya
 
 ## 6. Flow agent per run
 
-**State terkini** (terverifikasi via `ssh hermes`, 2026-06-13): **2 cron aktif**, dua-duanya pakai skill `knowledge-curator` + pola **wake-gate**. Config: scheduler tick 60s, `script timeout 180s`, `max_turns 150`, `gateway_timeout 1800s` (30 min). Graph: 33 concept notes.
+**State terkini** (terverifikasi via `ssh hermes`, 2026-06-13): **4 cron aktif**, semua pola **wake-gate**. Config: scheduler tick 60s, `script timeout 180s`, `max_turns 150`, `gateway_timeout 1800s` (30 min). Graph: ~43 concept + 5 project notes.
 
-| Cron | Schedule | Script (wake-gate) | Kerjaan |
-|---|---|---|---|
-| `process-inbox-knowledge` | `*/30 * * * *` | `process_inbox.sh` | drain `00-Inbox/_knowledge/` → concept notes |
-| `graph-walker` | `0 */6 * * *` | `graph_walker.sh` | resolve dangling concept refs (scan concepts/ + project notes) |
+| Cron | Schedule | Skill | Script (wake-gate) | Kerjaan |
+|---|---|---|---|---|
+| `process-inbox-knowledge` | `*/30 * * * *` | knowledge-curator | `process_inbox.sh` | drain `00-Inbox/_knowledge/` → concept notes |
+| `process-inbox-projects` | `*/30 * * * *` | project-researcher | `process_projects.sh` | drain `00-Inbox/_projects/` → project notes |
+| `graph-walker` | `0 */6 * * *` | knowledge-curator | `graph_walker.sh` | resolve dangling refs (scan concepts/ + project notes) |
+| `scan-curated-sources` | `0 6 * * *` | curator-triage | `scan_sources.sh` | curated feeds → triage → seed `_knowledge/` (Mesin 1, lihat [ARCH-defi-alpha.md](ARCH-defi-alpha.md)) |
 
 Perbedaan kunci dari desain FASE-0 lama: (1) ada **wake-gate** — tick idle nggak bakar token sama sekali; (2) cron sekarang **inbox/dangling-driven**, bukan "daily research job" yang baca watchlist/patterns (infra itu baru di FASE 4 — lihat [ARCH-defi-alpha.md](ARCH-defi-alpha.md)).
 

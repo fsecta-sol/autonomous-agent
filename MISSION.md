@@ -166,10 +166,10 @@ Kalau ritme ini gak terjadi 2 minggu berturut-turut, **sistem dianggap unhealthy
 | Fase | Durasi target | Output | Status |
 |---|---|---|---|
 | **0** — Foundation | 1 minggu | MISSION+ARCH+TLDR final, vault skeleton, Syncthing nyala, Obsidian-in-WSL siap, skill `knowledge-curator` pertama deployed | ✅ complete (2026-06-03) |
-| **1** — Knowledge curator passive | 1-2 minggu | `process-inbox-knowledge` jalan, 10+ konsep di graph, reciprocity verified | 🟡 in progress (2/10 — `mev.md`, `mempool.md`) |
-| **2** — Knowledge curator active | 1-2 minggu | `scan-curated-sources` jalan, sumber RSS+Twitter list dipilih | ⚪ |
-| **3** — Stabilize | 4 minggu | 50+ konsep, ritme harian terbentuk, graph view padat | ⚪ |
-| **4** — Alpha scanner | start setelah Fase 3 | Pilar B nyala dengan reasoning dari graph | ⚪ |
+| **1** — Knowledge curator passive | 1-2 minggu | `process-inbox-knowledge` jalan, 10+ konsep di graph, reciprocity verified | ✅ complete (2026-06-13 — ~43 konsep, reciprocity verified) |
+| **2** — Knowledge curator active | 1-2 minggu | `scan-curated-sources` jalan, sumber RSS dipilih | ✅ live (2026-06-13 — 14 feed, end-to-end verified; Twitter ditunda). Mesin 1 di [ARCH-defi-alpha.md](ARCH-defi-alpha.md) |
+| **3** — Stabilize | 4 minggu | 50+ konsep, ritme harian terbentuk, graph view padat | 🟡 in progress (43 konsep, mendekati 50; 4 cron jalan) |
+| **4** — Alpha scanner | start setelah Fase 3 | Pilar B nyala dengan reasoning dari graph | ⚪ belum (tapi `process-inbox-projects` cron + project-researcher sudah jalan — jalur project, bukan alpha scanner; lihat ARCH-defi-alpha.md gerbang kematangan) |
 
 ---
 
