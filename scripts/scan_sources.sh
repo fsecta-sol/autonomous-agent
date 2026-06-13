@@ -54,10 +54,14 @@ emitted_urls=()
 context_lines=()
 count=0
 
+# whitespace-only trim (NOT xargs — xargs does shell quote/paren parsing and
+# chokes on comment lines like "# Academic (high-noise; ...)").
+trim() { printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+
 while IFS='|' read -r name url flags; do
-  name="$(echo "${name:-}" | xargs)"
-  url="$(echo "${url:-}" | xargs)"
-  flags="$(echo "${flags:-}" | xargs)"
+  name="$(trim "${name:-}")"
+  url="$(trim "${url:-}")"
+  flags="$(trim "${flags:-}")"
   # skip comments / blanks
   case "$name" in ''|'#'*) continue ;; esac
   [ -z "$url" ] && continue
