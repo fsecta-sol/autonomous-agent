@@ -43,46 +43,11 @@ FETCH_TIMEOUT="${SCAN_FETCH_TIMEOUT:-25}"
 mkdir -p "$STATE_DIR"
 touch "$SEEN"
 
-# Parser: feed XML on stdin -> "url\ttitle" lines (newest first, capped).
-# Auto-detects Atom (<entry> + <id>) vs RSS (<item> + <link>). Stdlib only.
+# Parser lives in a separate file so the feed XML can be piped on stdin
+# (a heredoc `python3 - <<PY` would steal stdin for the program itself).
+# Auto-detects Atom (<entry>) vs RSS (<item>); emits "url\ttitle" lines.
 parse_feed() {
-  python3 - "$1" <<'PY'
-import sys, re, html
-cap = int(sys.argv[1])
-data = sys.stdin.read()
-
-def clean(t):
-    t = re.sub(r'<!\[CDATA\[(.*?)\]\]>', r'\1', t, flags=re.S)
-    t = re.sub(r'<[^>]+>', '', t)
-    t = html.unescape(t)
-    return re.sub(r'\s+', ' ', t).strip()
-
-def grab(block, tag):
-    m = re.search(r'<%s\b[^>]*>(.*?)</%s>' % (tag, tag), block, re.S | re.I)
-    return m.group(1) if m else ''
-
-out = []
-entries = re.findall(r'<entry\b.*?</entry>', data, re.S | re.I)   # Atom
-if entries:
-    for e in entries:
-        # prefer alternate link href, else <id>
-        m = re.search(r'<link\b[^>]*rel=["\']alternate["\'][^>]*href=["\']([^"\']+)', e, re.I) \
-            or re.search(r'<link\b[^>]*href=["\']([^"\']+)', e, re.I)
-        url = (m.group(1) if m else clean(grab(e, 'id'))).strip()
-        title = clean(grab(e, 'title'))
-        if url.startswith('http'):
-            out.append((url, title))
-else:
-    items = re.findall(r'<item\b.*?</item>', data, re.S | re.I)    # RSS
-    for it in items:
-        url = clean(grab(it, 'link')) or clean(grab(it, 'guid'))
-        title = clean(grab(it, 'title'))
-        if url.startswith('http'):
-            out.append((url, title))
-
-for url, title in out[:cap]:
-    print("%s\t%s" % (url, title[:160]))
-PY
+  python3 "$REPO/scripts/parse_feed.py" "$1"
 }
 
 emitted_urls=()
