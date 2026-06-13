@@ -103,6 +103,8 @@ Tujuan: pakai knowledge graph yang sudah dibangun untuk **filter peluang** — b
 
 Belum dibangun. Build setelah Pilar A berjalan 4-6 minggu dan graph sudah punya 50+ konsep ter-link. Membangun ini terlalu cepat = membangun signal aggregator tanpa konteks = jebakan gambler mindset.
 
+> Arsitektur + flow detail (active curated-source scan FASE 2 → graph → alpha scanner FASE 4, fokus **DeFi under the hood**: mekanisme/code/on-chain, bukan harga) ada di [ARCH-defi-alpha.md](ARCH-defi-alpha.md). Intinya: graph dipakai sebagai *filter*, dan alpha play numbuhin graph (`[NEEDS-CONCEPT]`) sebagai efek samping — bukan gambling di luar pemahaman.
+
 ---
 
 ## 5. Success metrics

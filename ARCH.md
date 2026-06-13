@@ -241,71 +241,60 @@ Tiap kali job fire, Hermes merakit "prompt akhir" dari beberapa lapis. Urutannya
 
 ## 6. Flow agent per run
 
-```
-T+0:00  ┌─────────────────────────────────────────┐
-        │ Hermes scheduler tick (tiap 60s)        │
-        │ → cek jobs.json, ada yg due?            │
-        └──────────────┬──────────────────────────┘
-                       │ ya, fire "crypto-research-daily"
-                       ▼
-T+0:01  ┌─────────────────────────────────────────┐
-        │ Job runner mulai                        │
-        │ - load skill (procedural)               │
-        │ - load context_from (working memory)    │
-        │ - rakit prompt (Bab 4)                  │
-        │ - spawn LLM session                     │
-        └──────────────┬──────────────────────────┘
-                       │
-                       ▼
-T+0:05  ┌─────────────────────────────────────────┐
-        │ Agent turn 1                            │
-        │ - Read vault/02-Projects/.../_index.md  │
-        │ - Read vault/.../patterns.md            │
-        │ - Read vault/.../watchlist.md           │
-        │ → tahu goal, tahu pattern, tahu state   │
-        └──────────────┬──────────────────────────┘
-                       │
-                       ▼
-T+0:10  ┌─────────────────────────────────────────┐
-        │ Agent turn 2-N (kerja sesungguhnya)     │
-        │ - fetch data (API, web)                 │
-        │ - filter, analisis                      │
-        │ - Write vault/.../runs/2026-05-29.md    │
-        │ - Edit vault/.../watchlist.md           │
-        │ - Append vault/.../patterns.md (if new) │
-        └──────────────┬──────────────────────────┘
-                       │
-                       ▼
-T+0:15  ┌─────────────────────────────────────────┐
-        │ Judge model: goal phase done?           │
-        │ - ya → finalize                         │
-        │ - belum → continuation prompt, ulang    │
-        │ - blocked → mark DONE (with reason)     │
-        └──────────────┬──────────────────────────┘
-                       │ done
-                       ▼
-T+0:16  ┌─────────────────────────────────────────┐
-        │ Persist                                 │
-        │ - tulis ringkasan ke output store       │
-        │   (jadi context_from BESOK)             │
-        │ - update state.db                │
-        │ - kirim delivery ke Telegram            │
-        │   (atau [SILENT] kalau gak ada highlight)│
-        └──────────────┬──────────────────────────┘
-                       │
-                       ▼
-T+0:17  ┌─────────────────────────────────────────┐
-        │ Syncthing deteksi vault berubah         │
-        │ → push ke laptop dalam detik            │
-        │ → Obsidian di laptop refresh otomatis   │
-        └─────────────────────────────────────────┘
+**State terkini** (terverifikasi via `ssh hermes`, 2026-06-13): **2 cron aktif**, dua-duanya pakai skill `knowledge-curator` + pola **wake-gate**. Config: scheduler tick 60s, `script timeout 180s`, `max_turns 150`, `gateway_timeout 1800s` (30 min). Graph: 33 concept notes.
 
-T+12h   (kamu buka laptop malam hari, lihat Telegram digest
-         + buka Obsidian baca 01-Daily/2026-05-29.md)
+| Cron | Schedule | Script (wake-gate) | Kerjaan |
+|---|---|---|---|
+| `process-inbox-knowledge` | `*/30 * * * *` | `process_inbox.sh` | drain `00-Inbox/_knowledge/` → concept notes |
+| `graph-walker` | `0 */6 * * *` | `graph_walker.sh` | resolve dangling concept refs (scan concepts/ + project notes) |
 
-T+24h   (cron tick lagi, siklus mulai dari awal —
-         context_from sekarang = output run kemarin)
+Perbedaan kunci dari desain FASE-0 lama: (1) ada **wake-gate** — tick idle nggak bakar token sama sekali; (2) cron sekarang **inbox/dangling-driven**, bukan "daily research job" yang baca watchlist/patterns (infra itu baru di FASE 4 — lihat [ARCH-defi-alpha.md](ARCH-defi-alpha.md)).
+
 ```
+T+0:00  Scheduler tick (tiap 60s) → ada job due di jobs.json?
+           │ ya → fire (mis. process-inbox-knowledge)
+           ▼
+T+0:01  PRE-CHECK SCRIPT jalan DULU  (process_inbox.sh / graph_walker.sh)
+           - cek kondisi murah (inbox kosong? / dangling = 0?)
+           │
+     ┌─────┴───────────────────────────────┐
+     │ last line stdout == {"wakeAgent":false}│  selain itu
+     ▼                                       ▼
+  ┌─────────────┐                    ┌──────────────────────────────────┐
+  │ IDLE TICK   │                    │ WORK TICK                        │
+  │ LLM DISKIP  │                    │ stdout script di-prepend ke prompt│
+  │ zero token  │                    │ → agent di-invoke (skill attached)│
+  │ tick selesai│                    └───────────────┬──────────────────┘
+  └─────────────┘                                    │
+  (mayoritas tick = ini,                             ▼
+   makanya cron murah)               T+0:05  Agent turn 1 — baca vault relevan
+                                              - Read 00-Inbox/_knowledge/<files>
+                                                (atau: dangling list dari script)
+                                              - Read 03-Areas/concepts/<related>.md
+                                                 │
+                                                 ▼
+                                     T+0:10  Agent turn 2..N  (≤ max_turns 150)
+                                              - fetch sumber (web / fetch_url.sh)
+                                              - Write/Edit 03-Areas/concepts/<slug>.md
+                                              - reciprocity (bidirectional links)
+                                              - move input → _processed/YYYY-MM-DD/*.txt
+                                              - append 01-Daily/YYYY-MM-DD.txt
+                                                 │
+                                                 ▼
+                                     T+~N   continue/finalize loop
+                                              (dibatasi max_turns + gateway_timeout 1800s)
+                                                 │ done
+                                                 ▼
+                                     Persist: ringkasan → output store (= context_from
+                                              run berikut), state.db, delivery → Telegram
+                                              ([SILENT] kalau nggak ada highlight)
+                                                 │
+                                                 ▼
+                                     Syncthing deteksi vault berubah → push ke laptop
+                                              dalam detik → Obsidian refresh otomatis
+```
+
+Operator (kamu): drop input ke `00-Inbox/` kapan aja → tick `*/30` berikutnya nge-resolve; baca Telegram digest + Obsidian graph pas senggang.
 
 ---
 
@@ -427,4 +416,4 @@ Tiga jenis data, tiga strategi — sesuai sifat dan ownership.
 
 ---
 
-*Companion doc: lihat [TLDR.md](TLDR.md) untuk prinsip desain (stateless, cron amnesia, judge, guardrail) — dokumen ini hanya membahas blueprint fisik & flow.*
+*Companion doc: lihat [TLDR.md](TLDR.md) untuk prinsip desain (stateless, cron amnesia, judge, guardrail) — dokumen ini hanya membahas blueprint fisik & flow. Untuk arsitektur forward-looking dua mesin yang belum dibangun (active curated-source scan FASE 2 + alpha scanner / Pilar B FASE 4, fokus DeFi under the hood), lihat [ARCH-defi-alpha.md](ARCH-defi-alpha.md).*
