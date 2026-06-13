@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """parse_feed.py — feed XML on stdin -> "url\\ttitle" lines (newest first, capped).
 
-Auto-detects Atom (<entry> + <id>/<link href>) vs RSS (<item> + <link>/<guid>).
-Stdlib only (regex-based for tolerance to namespaces / malformed feeds).
+Robust to two realities:
+  - Atom (<entry> + <link href> / <id>) vs RSS (<item> + <link>/<guid>).
+  - fetch_url.sh returns scrapling's HTML-serialized body, which HTML-parses the
+    XML: tags get lowercased and <link> is treated as a VOID element, so
+    "<link>https://x</link>" becomes "<link> https://x" (closing tag dropped).
+    So we must extract the permalink tolerantly, not assume well-formed XML.
 
-Usage:  cat feed.xml | parse_feed.py <max_items>
+Stdlib only. Usage:  cat feed.xml | parse_feed.py <max_items>
 """
 import sys, re, html
 
@@ -19,30 +23,44 @@ def clean(t: str) -> str:
     return re.sub(r'\s+', ' ', t).strip()
 
 
-def grab(block: str, tag: str) -> str:
-    m = re.search(r'<%s\b[^>]*>(.*?)</%s>' % (tag, tag), block, re.S | re.I)
-    return m.group(1) if m else ''
+def title_of(block: str) -> str:
+    m = re.search(r'<title\b[^>]*>(.*?)</title>', block, re.S | re.I)
+    return clean(m.group(1)) if m else ''
 
 
-out = []
+def url_of(block: str, atom: bool) -> str:
+    if atom:
+        # Atom: alternate link href, then any link href, then <id>
+        for pat in (r'<link\b[^>]*rel=["\']alternate["\'][^>]*href=["\'](https?://[^"\']+)',
+                    r'<link\b[^>]*href=["\'](https?://[^"\']+)',
+                    r'<id\b[^>]*>\s*(https?://[^<\s]+)'):
+            m = re.search(pat, block, re.I)
+            if m:
+                return m.group(1)
+        return ''
+    # RSS: <link> (proper OR HTML-void-mangled: URL as text right after <link>),
+    # then <guid>. Deliberately NOT a generic href scan (would catch links
+    # inside the description HTML).
+    for pat in (r'<link\b[^>]*>\s*(https?://[^<\s]+)',
+                r'<guid\b[^>]*>\s*(https?://[^<\s]+)'):
+        m = re.search(pat, block, re.I)
+        if m:
+            return m.group(1)
+    return ''
+
+
 entries = re.findall(r'<entry\b.*?</entry>', data, re.S | re.I)  # Atom
 if entries:
-    for e in entries:
-        m = (re.search(r'<link\b[^>]*rel=["\']alternate["\'][^>]*href=["\']([^"\']+)', e, re.I)
-             or re.search(r'<link\b[^>]*href=["\']([^"\']+)', e, re.I))
-        url = (m.group(1) if m else clean(grab(e, 'id'))).strip()
-        out.append((url, clean(grab(e, 'title'))))
+    blocks, atom = entries, True
 else:
-    items = re.findall(r'<item\b.*?</item>', data, re.S | re.I)  # RSS
-    for it in items:
-        url = clean(grab(it, 'link')) or clean(grab(it, 'guid'))
-        out.append((url, clean(grab(it, 'title'))))
+    blocks, atom = re.findall(r'<item\b.*?</item>', data, re.S | re.I), False  # RSS
 
 n = 0
-for url, title in out:
+for b in blocks:
+    url = url_of(b, atom).strip()
     if not url.startswith('http'):
         continue
-    sys.stdout.write("%s\t%s\n" % (url, title[:160]))
+    sys.stdout.write("%s\t%s\n" % (url, title_of(b)[:160]))
     n += 1
     if n >= cap:
         break
