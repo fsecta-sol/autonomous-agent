@@ -25,6 +25,7 @@ Default sistem: **mati, dibangunkan cron berkala.** Stateless. Ingatan ada di di
 | [setup/sync-pipeline.md](setup/sync-pipeline.md) | Tutorial end-to-end pipeline: SSH topology, Syncthing pairing, share folder vault, Obsidian-in-WSL install + shortcut. |
 | [setup/cron-jobs.md](setup/cron-jobs.md) | Cron job setup dengan preflight pattern: shell wrapper cek kondisi dulu, LLM dipanggil hanya kalau ada kerjaan (saves ~480K tokens/hari di idle ticks). |
 | [setup/telegram.md](setup/telegram.md) | Telegram bot utilization: #digest (cron output delivery) + #inbox (paste dari HP → save ke `00-Inbox/`). Includes Cloudflare/Twitter scoping (text-paste strategy). |
+| [setup/vault-first-mandate.md](setup/vault-first-mandate.md) | Vault-first grounding untuk **semua** channel (Telegram, dashboard, dll) via `terminal.cwd` + `vault/AGENTS.md` — bukan cuma thread #ask. Includes dashboard→systemd conversion. |
 | [setup/web-fetching.md](setup/web-fetching.md) | Anti-bot & auth-walled source strategy: surveys X MCP, Scrapling, CloakBrowser. Layered escalation Tier 0 (text-paste) → Tier 3 (CloakBrowser). Triggers untuk implement. |
 | [scripts/](scripts/) | Preflight scripts (`process_inbox.sh`, `graph_walker.sh`) yang di-symlink ke `~/.hermes/scripts/` di server. |
 | [skills/knowledge-curator/](skills/knowledge-curator/SKILL.md) | Inbox-driven concept curation: input → web sources → schema-enforced concept notes with reciprocity. |
