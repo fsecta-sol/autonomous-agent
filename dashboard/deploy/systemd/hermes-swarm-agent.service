@@ -1,0 +1,22 @@
+[Unit]
+Description=Hermes Swarm — agent runtime (FastAPI + LangGraph)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hermes/autonomous-agent/dashboard/apps/agent
+EnvironmentFile=-/home/hermes/autonomous-agent/dashboard/apps/agent/.env
+Environment="PATH=/home/hermes/.local/bin:/home/hermes/.hermes/node/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/hermes/.local/bin/uv run uvicorn agent.main:app --host 127.0.0.1 --port 8012
+Restart=always
+RestartSec=5
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

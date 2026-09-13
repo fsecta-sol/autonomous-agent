@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789182085001,
+      "tag": "0000_kind_hitman",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789196111192,
+      "tag": "0001_nostalgic_piledriver",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789201772306,
+      "tag": "0002_fine_bloodstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789203466566,
+      "tag": "0003_illegal_black_crow",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789274151912,
+      "tag": "0004_mushy_jubilee",
+      "breakpoints": true
+    }
+  ]
+}

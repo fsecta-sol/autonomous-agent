@@ -1,0 +1,22 @@
+[Unit]
+Description=Hermes Swarm — API backend (Next.js)
+After=network-online.target hermes-swarm-agent.service
+Wants=network-online.target hermes-swarm-agent.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hermes/autonomous-agent/dashboard/apps/backend
+EnvironmentFile=-/home/hermes/autonomous-agent/dashboard/apps/backend/.env.local
+Environment="PATH=/home/hermes/.local/bin:/home/hermes/.hermes/node/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/hermes/.local/bin/node /home/hermes/autonomous-agent/dashboard/node_modules/next/dist/bin/next start -p 3011
+Restart=always
+RestartSec=5
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

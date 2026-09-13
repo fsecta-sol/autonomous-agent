@@ -1,0 +1,211 @@
+@import "tailwindcss";
+@import "./workspace.css";
+
+:root,
+[data-theme="light"] {
+  --ink: oklch(0.22 0.018 262);
+  --bg: oklch(0.975 0.006 250);
+  --surface: oklch(0.995 0.003 250);
+  --muted: oklch(0.49 0.025 258);
+  --hairline: oklch(0.82 0.014 258);
+  --veil: oklch(0.18 0.02 262 / 0.24);
+  --accent: oklch(0.54 0.13 224);
+  --accent-fg: oklch(0.99 0.002 250);
+  --label: oklch(0.47 0.09 230);
+  --l-cryptography: oklch(0.52 0.07 208);
+  --l-foundations: oklch(0.51 0.075 250);
+  --l-platforms: oklch(0.5 0.07 280);
+  --l-applications: oklch(0.5 0.065 300);
+  --l-market: oklch(0.55 0.1 78);
+  --l-cross-cutting: oklch(0.5 0.018 258);
+  --l-warn: oklch(0.58 0.14 55);
+  --l-error: oklch(0.55 0.19 25);
+  --l-analysing: oklch(0.52 0.09 200);
+  --node-dim: 0.28;
+  --edge-op: 0.16;
+  --grid-line: color-mix(in srgb, var(--ink) 6%, transparent);
+  --card-shadow: 8px 8px 0 color-mix(in srgb, var(--ink) 8%, transparent);
+  --pop-shadow: 0 2px 8px oklch(0.2 0.02 260 / 0.18);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --ink: oklch(0.965 0.006 258);
+  --bg: oklch(0.145 0.015 262);
+  --surface: oklch(0.185 0.017 262);
+  --muted: oklch(0.66 0.025 258);
+  --hairline: oklch(0.31 0.02 260);
+  --veil: oklch(0.05 0.012 262 / 0.55);
+  --accent: oklch(0.74 0.115 224);
+  --accent-fg: oklch(0.16 0.012 262);
+  --label: oklch(0.78 0.05 230);
+  --l-cryptography: oklch(0.74 0.05 208);
+  --l-foundations: oklch(0.72 0.055 250);
+  --l-platforms: oklch(0.71 0.05 280);
+  --l-applications: oklch(0.7 0.045 300);
+  --l-market: oklch(0.72 0.05 78);
+  --l-cross-cutting: oklch(0.72 0.015 258);
+  --l-warn: oklch(0.78 0.13 55);
+  --l-error: oklch(0.68 0.19 25);
+  --l-analysing: oklch(0.72 0.08 200);
+  --node-dim: 0.2;
+  --edge-op: 0.1;
+  --pop-shadow: 0 2px 10px oklch(0 0 0 / 0.4);
+  color-scheme: dark;
+}
+
+/* No-JS first-paint fallback: before the boot script runs, follow the OS. The
+   attribute is absent only until that script sets it, so this never fights an
+   explicit choice. Values mirror the [data-theme="dark"] block above exactly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --ink: oklch(0.965 0.006 258);
+    --bg: oklch(0.145 0.015 262);
+    --surface: oklch(0.185 0.017 262);
+    --muted: oklch(0.66 0.025 258);
+    --hairline: oklch(0.31 0.02 260);
+    --veil: oklch(0.05 0.012 262 / 0.55);
+    --accent: oklch(0.74 0.115 224);
+    --accent-fg: oklch(0.16 0.012 262);
+    --label: oklch(0.78 0.05 230);
+    --l-cryptography: oklch(0.74 0.05 208);
+    --l-foundations: oklch(0.72 0.055 250);
+    --l-platforms: oklch(0.71 0.05 280);
+    --l-applications: oklch(0.7 0.045 300);
+    --l-market: oklch(0.72 0.05 78);
+    --l-cross-cutting: oklch(0.72 0.015 258);
+    --l-warn: oklch(0.78 0.13 55);
+    --l-error: oklch(0.68 0.19 25);
+    --l-analysing: oklch(0.72 0.08 200);
+    --node-dim: 0.2;
+    --edge-op: 0.1;
+    --pop-shadow: 0 2px 10px oklch(0 0 0 / 0.4);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-hairline: var(--hairline);
+  --color-veil: var(--veil);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-label: var(--label);
+  --color-cryptography: var(--l-cryptography);
+  --color-foundations: var(--l-foundations);
+  --color-platforms: var(--l-platforms);
+  --color-applications: var(--l-applications);
+  --color-market: var(--l-market);
+  --color-cross-cutting: var(--l-cross-cutting);
+  --color-warn: var(--l-warn);
+  --color-error: var(--l-error);
+  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  border-radius: 0 !important;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-plex-sans), system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  caret-color: var(--accent);
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+button:disabled {
+  cursor: default;
+}
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--ink);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes fa-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes activity-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

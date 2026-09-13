@@ -1,0 +1,504 @@
+<title>Long-Horizon Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ink: oklch(0.22 0.018 262);
+    --bg: oklch(0.975 0.006 250);
+    --surface: oklch(0.995 0.003 250);
+    --sunken: oklch(0.955 0.008 252);
+    --muted: oklch(0.44 0.028 258);
+    --hairline: oklch(0.82 0.014 258);
+    --accent: oklch(0.54 0.13 224);
+    --accent-soft: oklch(0.54 0.13 224 / 0.12);
+    --warn: oklch(0.58 0.14 55);
+    --warn-soft: oklch(0.58 0.14 55 / 0.13);
+    --error: oklch(0.55 0.19 25);
+    --error-soft: oklch(0.55 0.19 25 / 0.12);
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: oklch(0.965 0.006 258);
+      --bg: oklch(0.145 0.015 262);
+      --surface: oklch(0.185 0.017 262);
+      --sunken: oklch(0.165 0.016 262);
+      --muted: oklch(0.66 0.025 258);
+      --hairline: oklch(0.31 0.02 260);
+      --accent: oklch(0.74 0.115 224);
+      --accent-soft: oklch(0.74 0.115 224 / 0.16);
+      --warn: oklch(0.78 0.13 55);
+      --warn-soft: oklch(0.78 0.13 55 / 0.16);
+      --error: oklch(0.68 0.19 25);
+      --error-soft: oklch(0.68 0.19 25 / 0.15);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: oklch(0.965 0.006 258);
+    --bg: oklch(0.145 0.015 262);
+    --surface: oklch(0.185 0.017 262);
+    --sunken: oklch(0.165 0.016 262);
+    --muted: oklch(0.66 0.025 258);
+    --hairline: oklch(0.31 0.02 260);
+    --accent: oklch(0.74 0.115 224);
+    --accent-soft: oklch(0.74 0.115 224 / 0.16);
+    --warn: oklch(0.78 0.13 55);
+    --warn-soft: oklch(0.78 0.13 55 / 0.16);
+    --error: oklch(0.68 0.19 25);
+    --error-soft: oklch(0.68 0.19 25 / 0.15);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding-block: 4rem 6rem;
+    padding-inline: clamp(1.1rem, 4vw, 2.5rem);
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  code, .mono { font-family: var(--mono); font-size: 0.86em; }
+
+  /* ── masthead ─────────────────────────────────── */
+  .masthead { border-bottom: 1px solid var(--hairline); padding-bottom: 2.2rem; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1.1rem;
+    display: flex;
+    gap: 0.7rem;
+    align-items: center;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  h1 {
+    font-size: clamp(2.1rem, 5.5vw, 3.3rem);
+    line-height: 1.05;
+    letter-spacing: -0.022em;
+    font-weight: 600;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: clamp(1.05rem, 2.2vw, 1.28rem);
+    line-height: 1.5;
+    color: var(--ink);
+    max-width: 62ch;
+    margin: 0 0 1.6rem;
+  }
+  .standfirst strong { font-weight: 600; }
+  .scope { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+  .chip {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    padding: 0.32rem 0.7rem;
+    background: var(--surface);
+  }
+  .chip b { color: var(--ink); font-weight: 500; }
+
+  /* ── sections ─────────────────────────────────── */
+  section { padding-block: 3rem 0; }
+  h2 {
+    font-size: 1.02rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 1.4rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.8rem;
+  }
+  h2 .n {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+  }
+  h3 { font-size: 0.94rem; font-weight: 600; margin: 1.8rem 0 0.7rem; }
+  p { margin: 0 0 1rem; max-width: 68ch; color: var(--ink); }
+  .lede { color: var(--muted); }
+
+  /* ── verdict ──────────────────────────────────── */
+  .verdict {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--error);
+    border-radius: 12px;
+    padding: 1.5rem 1.6rem 1.4rem;
+  }
+  .verdict h3 {
+    margin: 0.5rem 0 0.6rem;
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    line-height: 1.3;
+  }
+  .verdict h3 em { font-style: normal; color: var(--error); }
+  .verdict p { margin: 0; color: var(--muted); max-width: 70ch; }
+  .verdict p strong { color: var(--ink); font-weight: 600; }
+
+  /* ── pills ────────────────────────────────────── */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.26rem 0.58rem;
+    border-radius: 6px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; }
+  .pill.have { color: color-mix(in oklch, var(--accent) 70%, var(--ink)); background: var(--accent-soft); border-color: color-mix(in oklch, var(--accent) 35%, transparent); }
+  .pill.have::before { background: var(--accent); }
+  .pill.partial { color: color-mix(in oklch, var(--warn) 72%, var(--ink)); background: var(--warn-soft); border-color: color-mix(in oklch, var(--warn) 35%, transparent); }
+  .pill.partial::before { background: var(--warn); }
+  .pill.missing { color: color-mix(in oklch, var(--error) 72%, var(--ink)); background: var(--error-soft); border-color: color-mix(in oklch, var(--error) 35%, transparent); }
+  .pill.missing::before { background: var(--error); }
+  .pill.na { color: var(--muted); background: var(--sunken); border-color: var(--hairline); }
+  .pill.na::before { background: var(--muted); }
+
+  /* ── step-budget chart ────────────────────────── */
+  .chart { margin: 0.4rem 0 0; display: grid; gap: 0.85rem; }
+  .bar-row { display: grid; grid-template-columns: 12.5rem 1fr; align-items: center; gap: 1rem; }
+  .bar-label { font-size: 0.86rem; }
+  .bar-label b { display: block; font-weight: 600; }
+  .bar-label span { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .track { position: relative; height: 30px; background: var(--sunken); border-radius: 6px; overflow: hidden; border: 1px solid var(--hairline); }
+  .fill { position: absolute; inset: 0 auto 0 0; border-radius: 5px; display: flex; align-items: center; padding-left: 10px; }
+  .fill span { font-family: var(--mono); font-size: 11.5px; font-weight: 500; color: var(--bg); }
+  .fill.us { background: var(--error); }
+  .fill.ref { background: var(--accent); }
+  .fill.hermes { background: color-mix(in oklch, var(--accent) 70%, var(--muted)); }
+  .chart-note { font-size: 0.82rem; color: var(--muted); margin-top: 0.9rem; }
+  .chart-note code { color: var(--ink); }
+
+  /* ── matrix ───────────────────────────────────── */
+  .tbl-scroll { overflow-x: auto; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 0.82rem; }
+  caption { text-align: left; font-size: 0.78rem; color: var(--muted); padding: 0.9rem 1rem 0; }
+  th, td { text-align: left; padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  thead th {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    background: var(--sunken);
+    position: sticky; top: 0;
+  }
+  thead th.ours { color: var(--error); }
+  tbody th {
+    font-weight: 500;
+    font-size: 0.83rem;
+    color: var(--ink);
+    white-space: nowrap;
+    background: var(--surface);
+    position: sticky; left: 0;
+  }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: none; }
+  td .pill { margin-bottom: 0.35rem; }
+  td .cell-note { color: var(--muted); font-size: 0.78rem; line-height: 1.45; display: block; }
+  td.ours-col { background: var(--error-soft); }
+
+  /* ── evidence / recommendation ────────────────── */
+  .ev-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .ev {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    padding: 1.1rem 1.2rem;
+  }
+  .ev h3 { margin: 0 0 0.4rem; font-size: 0.92rem; }
+  .ev p { margin: 0 0 0.7rem; font-size: 0.82rem; color: var(--muted); }
+  .ev .src { font-family: var(--mono); font-size: 10.5px; color: var(--accent); word-break: break-word; }
+
+  ol.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 0.9rem; }
+  ol.steps li {
+    position: relative;
+    padding: 1.1rem 1.2rem 1.1rem 3.4rem;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+  }
+  ol.steps li::before {
+    counter-increment: step;
+    content: counter(step, decimal-leading-zero);
+    position: absolute;
+    left: 1.1rem; top: 1.15rem;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  ol.steps h3 { margin: 0 0 0.35rem; font-size: 0.94rem; }
+  ol.steps p { margin: 0; font-size: 0.85rem; color: var(--muted); }
+  ol.steps p .mono { color: var(--ink); }
+  .must { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--error); margin-left: 0.5rem; }
+
+  .caveat { border-top: 1px solid var(--hairline); margin-top: 3rem; padding-top: 1.6rem; }
+  .caveat p { font-size: 0.85rem; color: var(--muted); }
+  .caveat h2 { margin-bottom: 1rem; }
+  footer { margin-top: 2.5rem; padding-top: 1.4rem; border-top: 1px solid var(--hairline); font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem; }
+
+  @media (max-width: 560px) {
+    .bar-row { grid-template-columns: 1fr; gap: 0.3rem; }
+    .masthead { padding-bottom: 1.6rem; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .fill { transition: width 0.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Riset arsitektur · 13 Sep 2026</p>
+    <h1>Long-Horizon Audit</h1>
+    <p class="standfirst">
+      Agen di dashboard kita sanggup <strong>burst pendek</strong>, belum sanggup <strong>lari panjang</strong>.
+      Halaman ini membaca kode tiga agen yang sudah populer, lalu memetakan jarak menuju agen yang bisa berjalan
+      long-horizon tanpa batas praktis.
+    </p>
+    <div class="scope">
+      <span class="chip"><b>Swarm Command</b> · agen kita</span>
+      <span class="chip"><b>openai-agents-js</b> · OpenAI Agents SDK</span>
+      <span class="chip"><b>langgraph</b> · LangChain</span>
+      <span class="chip"><b>hermes-agent</b> · Nous Research</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="verdict">
+      <span class="pill missing">Verdict: belum siap</span>
+      <h3>Loop kita berhenti di <em>4 langkah tool</em> — tanpa kompaksi konteks, tanpa checkpoint, tanpa resume.</h3>
+      <p>
+        Itu cuma satu konstanta (<code>MAX_TOOL_STEPS = 4</code>), tapi menaikkannya saja berbahaya: konteks akan
+        meluap dan satu koneksi putus menghapus seluruh run. Yang penting dari riset ini —
+        <strong>tak satu pun agen rujukan itu benar-benar “tanpa limit.”</strong> OpenAI default 10 turn, LangGraph
+        10.007 langkah, Hermes 500 iterasi + batas waktu. Mereka semua <em>effectively unbounded</em> dengan cara
+        yang sama: budget besar + kompaksi konteks + checkpoint/resume + penutup yang rapi. Itulah target sebenarnya.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">01</span> Yang sebenarnya dibutuhkan long-horizon</h2>
+    <p class="lede">
+      Tujuh sumbu, bukan satu. Menambah langkah tanpa enam sisanya hanya memindahkan kegagalan ke tempat yang lebih
+      mahal (konteks meluap di langkah ke-30, bukan error di langkah ke-5).
+    </p>
+    <div class="ev-grid">
+      <div class="ev"><h3>Budget langkah</h3><p>Berapa kali model boleh memanggil tool berurutan dalam satu run — harus besar atau adaptif, bukan 4.</p></div>
+      <div class="ev"><h3>Kompaksi konteks</h3><p>Riwayat + hasil tool tumbuh tak terbatas; harus diringkas sebelum melewati window model.</p></div>
+      <div class="ev"><h3>Checkpoint &amp; resume</h3><p>State run disimpan tiap langkah, jadi putus koneksi = “lanjutkan”, bukan “ulang dari nol”.</p></div>
+      <div class="ev"><h3>Hasil tool</h3><p>Output tool di-cap &amp; divalidasi sebelum masuk konteks, supaya satu baca besar tak meledakkan window.</p></div>
+      <div class="ev"><h3>Timeout realistis</h3><p>Idle &amp; total-timeout aktif, plus budget waktu dinding sebagai pagar, bukan pemutus langkah.</p></div>
+      <div class="ev"><h3>Delegasi</h3><p>Subagen untuk memecah tugas panjang, masing-masing dengan budget sendiri.</p></div>
+      <div class="ev"><h3>Penjadwalan</h3><p>Jalan otonom lintas-jam (cron) tanpa operator menekan tombol.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">02</span> Budget langkah, di skala sebenarnya</h2>
+    <div class="chart">
+      <div class="bar-row">
+        <div class="bar-label"><b>Agen kita</b><span>MAX_TOOL_STEPS</span></div>
+        <div class="track"><div class="fill us" style="width:15%"><span>4</span></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><b>OpenAI Agents SDK</b><span>DEFAULT_MAX_TURNS · bisa diubah</span></div>
+        <div class="track"><div class="fill ref" style="width:25%"><span>10</span></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><b>Hermes</b><span>max_iterations induk · dijual berbagi ke subagen</span></div>
+        <div class="track"><div class="fill hermes" style="width:67%"><span>500</span></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><b>LangGraph</b><span>DEFAULT_RECURSION_LIMIT</span></div>
+        <div class="track"><div class="fill ref" style="width:100%"><span>10.007</span></div></div>
+      </div>
+    </div>
+    <p class="chart-note">
+      Skala logaritmik (agar 4 dan 10.007 bisa tampil bersamaan). Angka nyata dari kode:
+      <code>MAX_TOOL_STEPS = 4</code> · <code>DEFAULT_MAX_TURNS = 10</code> · <code>max_iterations = 500</code>
+      (konstruktor tingkat bawah Hermes justru <code>sys.maxsize</code>, praktis tak terbatas) ·
+      <code>DEFAULT_RECURSION_LIMIT = 10007</code>. Ambang besar bukan tujuan akhir — itu <em>syarat perlu</em>; yang membuatnya aman adalah enam sumbu lain.
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="n">03</span> Perbandingan per sumbu</h2>
+    <div class="tbl-scroll">
+      <table>
+        <caption>Status dibaca langsung dari kode, bukan dari dokumentasi pemasaran. Hijau = ada &amp; terpasang; kuning = ada tapi sebagian / perlu dirakit sendiri; merah = tak ada.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Sumbu</th>
+            <th scope="col" class="ours">Swarm Command (kita)</th>
+            <th scope="col">OpenAI Agents SDK</th>
+            <th scope="col">LangGraph</th>
+            <th scope="col">Hermes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Budget langkah</th>
+            <td class="ours-col"><span class="pill missing">Tidak ada</span><span class="cell-note">4 keras, satu turn.</span></td>
+            <td><span class="pill partial">Sebagian</span><span class="cell-note">10 default, configurable; tipe mengizinkan <span class="mono">null</span>.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">10.007, lewat env/config.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">500 induk / 50 subagen + budget waktu dinding.</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Kompaksi konteks</th>
+            <td class="ours-col"><span class="pill missing">Tidak ada</span><span class="cell-note">Riwayat tumbuh tanpa batas.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Session + kompaksi Responses.</span></td>
+            <td><span class="pill partial">Sebagian</span><span class="cell-note">Menyediakan hook; kebijakan di tanganmu.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Multi-pass: idle + ambang token + overflow.</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Checkpoint &amp; resume</th>
+            <td class="ours-col"><span class="pill missing">Tidak ada</span><span class="cell-note">Tool turn tak dipersist.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">RunState serializable + resume, ber-schema.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Checkpointer penuh (Postgres/SQLite/Redis) + time-travel.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Tool turn disimpan sebelum efek samping.</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Hasil tool</th>
+            <td class="ours-col"><span class="pill missing">Tidak ada</span><span class="cell-note">Bisa dorong 200&nbsp;KB ke konteks.</span></td>
+            <td><span class="pill partial">Sebagian</span><span class="cell-note">Timeout di-cap; output tak selalu.</span></td>
+            <td><span class="pill na">N/A</span><span class="cell-note">Framework graph, bukan loop agen.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Validate / cap / dedupe tiap ronde.</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Retry stream</th>
+            <td class="ours-col"><span class="pill have">Ada</span><span class="cell-note">Connect-only, benar untuk SSE.</span></td>
+            <td><span class="pill have">Ada</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Kebijakan retry per-node.</span></td>
+            <td><span class="pill have">Ada</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Batas konkurensi</th>
+            <td class="ours-col"><span class="pill have">Ada</span><span class="cell-note">Semaphore tahan slot antar ronde.</span></td>
+            <td><span class="pill na">N/A</span></td>
+            <td><span class="pill na">N/A</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Dispatcher + file lock.</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Delegasi / subagen</th>
+            <td class="ours-col"><span class="pill missing">Tidak ada</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Handoffs antar-agen.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Subgraphs / multi-agen.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">delegate_task, budget per-anak.</span></td>
+          </tr>
+          <tr>
+            <th scope="row">Penjadwalan otonom</th>
+            <td class="ours-col"><span class="pill missing">Tidak ada</span><span class="cell-note">CRON masih mock.</span></td>
+            <td><span class="pill missing">Tidak ada</span><span class="cell-note">Library, bukan runtime.</span></td>
+            <td><span class="pill partial">Sebagian</span><span class="cell-note">Levalkan ke platform terpisah.</span></td>
+            <td><span class="pill have">Ada</span><span class="cell-note">Scheduler tick 60s + delivery queue.</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">04</span> Pola rujukan yang layak dicontek</h2>
+    <div class="ev-grid">
+      <div class="ev">
+        <h3>Budget iterasi yang bisa “refund”</h3>
+        <p>Hermes menghitung langkah dengan counter thread-safe, dan mengembalikan satu iterasi untuk giliran yang murni programatik — jadi budget tak “dibakar” oleh langkah bookkeeping.</p>
+        <p class="src">agent/iteration_budget.py</p>
+      </div>
+      <div class="ev">
+        <h3>Simpan tool-turn sebelum efek samping</h3>
+        <p>Ronde tool memvalidasi, meng-cap, lalu <em>mempersist</em> turn tool-call sebelum menjalankan tool. Satu efek samping tak pernah terjadi tanpa jejak yang bisa dilanjutkan.</p>
+        <p class="src">agent/turn_tool_round.py</p>
+      </div>
+      <div class="ev">
+        <h3>Kompaksi sebagai “satu-satunya pengecualian”</h3>
+        <p>Hermes menganggap prompt-cache sakral: apa pun yang mengubah konteks lama membatalkan cache dan melipatgandakan biaya. Hanya kompaksi yang boleh — dan itu dirancang hati-hati (snapshot privat, commit fence).</p>
+        <p class="src">agent/conversation_compression.py</p>
+      </div>
+      <div class="ev">
+        <h3>State run yang serializable &amp; bisa di-resume</h3>
+        <p>OpenAI menyimpan RunState ber-schema (versi 1.0→1.6), termasuk turn &amp; langkah saat ini, lalu bisa <span class="mono">resume</span> dari titik itu — persis yang kita tak punya.</p>
+        <p class="src">packages/agents-core/src/runState.ts</p>
+      </div>
+      <div class="ev">
+        <h3>Checkpoint penuh antar-superstep</h3>
+        <p>LangGraph men-snapshot seluruh channel tiap langkah (<span class="mono">channel_values</span>, versi, pending writes) ke Postgres/SQLite/Redis — dasar dari time-travel &amp; human-in-the-loop.</p>
+        <p class="src">libs/checkpoint · pregel/_checkpoint.py</p>
+      </div>
+      <div class="ev">
+        <h3>Batas waktu dinding, bukan pemutus langkah</h3>
+        <p>Hermes menambahkan <span class="mono">--run-budget</span> (waktu dinding) dan menyuntik notis “tutup sekarang” di 80% — mengakhiri run dengan rapi tanpa mematikan langkah di tengah.</p>
+        <p class="src">agent/conversation_loop.py</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">05</span> Jalan menuju “tak terbatas” — urut</h2>
+    <ol class="steps">
+      <li>
+        <h3>Budget langkah besar + adaptif <span class="must">wajib bareng</span></h3>
+        <p>Ganti <span class="mono">MAX_TOOL_STEPS = 4</span> jadi budget (mis. ratusan) yang bisa “refund” untuk langkah bookkeeping. <em>Jangan lakukan ini sendiri</em> — pasangkan dengan #2 dan #3, kalau tidak runaway jadi lebih mahal.</p>
+      </li>
+      <li>
+        <h3>Kompaksi konteks + cap hasil tool</h3>
+        <p>Saat riwayat mendekati ambang token, ringkas turn lama jadi satu blok padat (satu-satunya operasi yang boleh menyentuh konteks lama). Cap tiap hasil tool (mis. 10–20&nbsp;KB) sebelum masuk pesan — ini yang mencegah <span class="mono">vault_read</span> 200&nbsp;KB meledakkan window.</p>
+      </li>
+      <li>
+        <h3>Persist tool-turn + resume</h3>
+        <p>Simpan turn tool-call <em>sebelum</em> mengeksekusi tool (pola Hermes), lalu tambah role <span class="mono">tool</span> di tabel <span class="mono">messages</span> + endpoint “lanjutkan run”. Koneksi putus = resume, bukan ulang.</p>
+      </li>
+      <li>
+        <h3>Aktifkan idle &amp; total-timeout, tambah budget waktu dinding</h3>
+        <p><span class="mono">IDLE_TIMEOUT_MS</span> / <span class="mono">TOTAL_TIMEOUT_MS</span> yang sudah didefinisikan tapi belum dipasang: sambungkan. Tambah plafon waktu dinding dengan notis penutup, bukan pemutus langkah.</p>
+      </li>
+      <li>
+        <h3>Delegasi, lalu penjadwalan</h3>
+        <p>Subagen dengan budget sendiri (memecah tugas panjang), baru kemudian cron asli menggantikan <span class="mono">CRON</span> mock supaya agen bisa jalan otonom lintas-jam. Dua ini baru aman setelah #1–#4 berdiri.</p>
+      </li>
+    </ol>
+  </section>
+
+  <div class="caveat">
+    <h2><span class="n">06</span> Batas riset ini</h2>
+    <p>
+      Saya membaca <strong>kode inti yang menentukan</strong> long-horizon di tiap repo — loop, budget, kompaksi, checkpoint, sesi, scheduler, delegasi — bukan tiap baris (hermes-agent saja 12.800+ file). Angka (`4`, `10`, `500`, `10007`) diambil langsung dari kode. Satu hal yang <strong>belum saya verifikasi</strong>: apakah <span class="mono">maxTurns: null</span> di OpenAI SDK berarti benar-benar tanpa batas (tipe mengizinkan <span class="mono">null</span>, tapi cabang penanganannya belum saya baca). Repo dikloning di <span class="mono">/tmp/agent-research/</span>.
+    </p>
+  </div>
+
+  <footer>
+    <span>Long-Horizon Audit · Swarm Command</span>
+    <span>4 agen · 7 sumbu · 1 kesimpulan</span>
+  </footer>
+</div>
