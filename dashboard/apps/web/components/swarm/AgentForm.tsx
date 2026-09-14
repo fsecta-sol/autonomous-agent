@@ -274,13 +274,14 @@ export function AgentForm({ agentId, onClose, onSaved }: { agentId?: string; onC
 
             <section className="af-sec">
               <h3>Terminal</h3>
-              <div className="cfg-modes">
+              <div className="cfg-modes" role="radiogroup" aria-label="Terminal mode">
                 {TERMINALS.map(([mode, label]) => (
                   <button
                     type="button"
                     key={mode}
+                    role="radio"
+                    aria-checked={form.terminalMode === mode}
                     className={`cfg-mode ${form.terminalMode === mode ? "is-on" : ""} ${mode === "unsandboxed" ? "is-danger" : ""}`}
-                    aria-pressed={form.terminalMode === mode}
                     disabled={mode === "unsandboxed" && !allowUnsandboxed}
                     title={mode === "unsandboxed" && !allowUnsandboxed ? "Disabled: server does not permit unsandboxed execution" : undefined}
                     onClick={() => chooseTerminal(mode)}

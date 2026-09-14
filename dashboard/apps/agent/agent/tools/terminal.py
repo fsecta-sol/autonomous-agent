@@ -19,6 +19,7 @@ import uuid
 from pathlib import Path
 
 from langchain_core.tools import BaseTool, tool
+from langgraph.types import interrupt
 
 from ..config import scratch_dir
 from .builtin import dumps
@@ -40,10 +41,15 @@ def _work_dir(agent_id: str) -> Path:
     return directory
 
 
+# A fixed system PATH — the sandbox's helpers (unshare, mount, chroot) live in
+# sbin/bin, so we never inherit a caller PATH that might omit them.
+SYSTEM_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+
 def _scrubbed_env(home: str) -> dict[str, str]:
     """Minimal, secret-free environment for both modes."""
     return {
-        "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+        "PATH": SYSTEM_PATH,
         "HOME": home,
         "LANG": os.environ.get("LANG", "C.UTF-8"),
         "TERM": "dumb",
@@ -159,6 +165,19 @@ def make_run_command(terminal_mode: str, allow_unsandboxed: bool, agent_id: str 
 
         if mode == "off":
             return dumps({"error": "terminal is disabled for this agent"})
+
+        # Every command is approved by the operator before it runs. This pauses
+        # the whole run; the graph checkpoints, and a later resume returns the
+        # decision here. (The code above is pure, so node replay is harmless.)
+        decision = interrupt(
+            {
+                "tool": "run_command",
+                "args": {"command": cmd, "mode": mode},
+                "message": f"Approve running this command ({mode})?",
+            }
+        )
+        if decision != "approve":
+            return dumps({"error": "command denied by operator", "denied": True})
 
         _audit(agent_id, mode, cmd)
         result = _run_unsandboxed(cmd, agent_id) if mode == "unsandboxed" else _run_sandboxed(cmd, agent_id)

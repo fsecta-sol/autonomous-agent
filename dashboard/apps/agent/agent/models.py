@@ -23,6 +23,13 @@ class ChatTurn(BaseModel):
     content: str
 
 
+class ResumeDecision(BaseModel):
+    """The operator's answer to a pending interrupt (tool approval)."""
+
+    id: str | None = None
+    decision: Literal["approve", "deny"]
+
+
 class RunRequest(BaseModel):
     agentId: str = ""
     llm: LlmConfig
@@ -33,3 +40,8 @@ class RunRequest(BaseModel):
     terminalMode: Literal["off", "sandbox", "unsandboxed"] = "off"
     allowUnsandboxed: bool = False
     warnings: list[str] = Field(default_factory=list)
+    # The chat session this run belongs to; becomes the LangGraph thread_id and
+    # therefore the unit of persistence. Empty ⇒ an ephemeral, non-persistent run.
+    sessionId: str = ""
+    # When set, resume a run paused at an approval interrupt (same sessionId).
+    resume: ResumeDecision | None = None

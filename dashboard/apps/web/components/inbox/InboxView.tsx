@@ -32,6 +32,10 @@ export function InboxView() {
       <div className="panel-header">
         <h2>Inbox</h2>
         <div className="graph-meta">
+          <span className="grp-tag" title="Inbox contents are sample data until the vault reader is wired">
+            sample
+          </span>
+          <span className="dot">·</span>
           <span>{waitingN} pending · last processed 18 Aug · backlog {backlog} days</span>
         </div>
       </div>

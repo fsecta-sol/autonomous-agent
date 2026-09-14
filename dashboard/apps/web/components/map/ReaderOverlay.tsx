@@ -12,7 +12,7 @@ import { renderMarkdown } from "@/lib/markdown";
 export function ReaderOverlay() {
   const { reader, closeReader, focusNodeByTitle, graph } = useWorkspace();
 
-  const html = useMemo(() => (reader ? renderMarkdown(reader.body) : ""), [reader]);
+  const html = useMemo(() => (reader ? renderMarkdown(reader.body, { allowRawHtml: true }) : ""), [reader]);
 
   if (!reader) return null;
 

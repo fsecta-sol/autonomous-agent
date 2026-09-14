@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspace } from "@/components/providers/workspace";
 import {
   streamAgentChat,
@@ -9,13 +9,27 @@ import {
   listChats,
   createChat,
   getChat,
+  getChatState,
   appendChatMessage,
   deleteChat,
+  fetchSpawns,
   type ChatSession,
   type ChatSessionMessage,
 } from "@/lib/api";
 import { LlmError } from "@/lib/llm-client";
-import type { ToolStreamEvent } from "@/lib/llm-stream";
+import type { InterruptEvent } from "@/lib/llm-stream";
+import {
+  applyReasoning,
+  applyText,
+  applyToolEnd,
+  applyToolStart,
+  applyTurnEnd,
+  applyTurnError,
+  initTrace,
+  syncSpawns,
+  type ActivityStep,
+} from "@/lib/execution";
+import { AgentExecutionTimeline, type TraceState } from "@/components/execution/AgentExecutionTimeline";
 import { renderMarkdown } from "@/lib/markdown";
 import { AgentConfigPane } from "./AgentConfigPane";
 import { IconAttachment, IconBolt, IconCheck, IconChevronLeft, IconChat, IconClose, IconMic, IconPlus, IconScreen, IconSearch, IconSpark, IconArrowUp, IconTrash } from "@/components/ui/icons";
@@ -31,14 +45,6 @@ interface AgentPhase {
   status: AgentStatus;
   /** number of tool calls seen so far this turn (drives "researching") */
   tools: number;
-}
-
-interface ToolRun {
-  key: string;
-  name: string;
-  args?: Record<string, unknown>;
-  status: "running" | "done" | "error";
-  result?: string;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -64,17 +70,35 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
   const [loading, setLoading] = useState(true);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  /** true when the loaded transcript ends on an unanswered user turn: the run
+   *  is still going server-side (the view was left mid-turn), so we keep
+   *  reading the transcript until its reply lands rather than showing a
+   *  conversation that looks truncated. */
+  const [awaitingReply, setAwaitingReply] = useState(false);
   /** explicit agent lifecycle — drives the activity indicator and reveal */
   const [phase, setPhase] = useState<AgentPhase>({ status: "idle", tools: 0 });
   const [error, setError] = useState<string | null>(null);
   const [chips, setChips] = useState<Record<string, boolean>>({ reasoning: false, research: false });
   const [attachment, setAttachment] = useState<AttachedFile | null>(null);
   const [micOn, setMicOn] = useState(false);
-  const [toolRuns, setToolRuns] = useState<ToolRun[]>([]);
+  /** the live execution trace for the active turn (event-folded, not mocked) */
+  const [trace, setTrace] = useState<ActivityStep[]>([]);
+  const [traceState, setTraceState] = useState<TraceState>("done");
   const [warnings, setWarnings] = useState<string[]>([]);
+  /** a pending tool-approval the run is paused on, if any */
+  const [pendingApproval, setPendingApproval] = useState<InterruptEvent | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  /** true while the reader is parked at (near) the bottom. Only then do we
+   *  follow new content; once they scroll up to read, we leave them there
+   *  instead of yanking the view back down on every streamed frame. */
+  const atBottomRef = useRef(true);
+  const approvalRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const runSeq = useRef(0);
+  /** assistant text accumulated across a whole turn (survives an approval pause
+   *  so the persisted reply spans pause + resume) */
+  const accRef = useRef("");
+  /** set during a stream when a run pauses for approval; read in `finally` */
+  const pausedRef = useRef(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const speechRef = useRef<SpeechRecognition | null>(null);
   const baseInputRef = useRef("");
@@ -94,10 +118,46 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
   /** fired once the reveal queue is empty after the stream ends */
   const onRevealDoneRef = useRef<(() => void) | null>(null);
 
+  // Follow new content only while the reader is parked at the bottom. The
+  // reveal pump replaces `messages` every animation frame, so an unconditional
+  // `scrollTop = scrollHeight` here yanked the view back down each frame —
+  // which also swallowed the entrance of any step mounting that same frame.
   useEffect(() => {
     const el = messagesRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, sending, toolRuns]);
+    if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
+  }, [messages, sending, trace]);
+
+  /** Keep `atBottomRef` honest as the reader scrolls (or content grows). */
+  const onMessagesScroll = () => {
+    const el = messagesRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  };
+
+  // A run pausing for approval must pull the operator's attention: move focus
+  // onto the prompt so a keyboard/SR user lands on Deny/Approve, not mid-scroll.
+  useEffect(() => {
+    if (pendingApproval) approvalRef.current?.focus();
+  }, [pendingApproval]);
+
+  /** Re-surface an approval if the loaded session's run was paused (e.g. after
+   *  a reload). Best-effort: a failure just means no pending approval shown. */
+  const syncPendingApproval = useCallback(async (sid: string) => {
+    try {
+      const state = await getChatState(sid);
+      if (state.paused && state.interrupt) {
+        setPendingApproval({
+          type: "interrupt",
+          id: state.interrupt.id,
+          tool: state.interrupt.tool,
+          args: state.interrupt.args,
+          message: state.interrupt.message,
+        });
+      }
+    } catch {
+      /* not paused / agent unreachable — nothing to surface */
+    }
+  }, []);
 
   // Load the newest session for this agent, or start one if none exist.
   // `loading` already starts true; the component remounts per agent (key).
@@ -115,6 +175,8 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
           setSessions(list);
           setSessionId(detail.id);
           setMessages(detail.messages.map(toUiMessage));
+          setAwaitingReply(endsUnanswered(detail.messages));
+          void syncPendingApproval(detail.id);
         } else {
           const detail = await createChat(agent.id);
           if (cancelled || streamActiveRef.current) return;
@@ -131,9 +193,88 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
     return () => {
       cancelled = true;
     };
-  }, [agent.id]);
+  }, [agent.id, syncPendingApproval]);
+
+  // The loaded transcript ends on an unanswered user turn — its run is still
+  // finishing server-side (we left the view mid-turn or reloaded during one).
+  // Poll the persisted transcript until the reply lands, so returning to the
+  // chat shows the answer instead of a conversation that stops at the question.
+  useEffect(() => {
+    if (!awaitingReply || !sessionId || sending) return;
+    let cancelled = false;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (streamActiveRef.current) return; // a live stream owns the list now
+      tries += 1;
+      try {
+        const detail = await getChat(sessionId);
+        if (cancelled || streamActiveRef.current) return;
+        const filled = !endsUnanswered(detail.messages);
+        setMessages(detail.messages.map(toUiMessage));
+        if (filled) {
+          setAwaitingReply(false);
+          void listChats(agent.id).then((s) => !cancelled && setSessions(s)).catch(() => {});
+          return;
+        }
+      } catch {
+        /* transient — keep polling */
+      }
+      // ~2.5 min ceiling: a real run finishes inside it; past that, stop quietly.
+      if (tries >= 60) {
+        setAwaitingReply(false);
+        return;
+      }
+      timer = setTimeout(poll, 2500);
+    };
+    timer = setTimeout(poll, 2500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [awaitingReply, sessionId, sending, agent.id]);
+
+  // While the turn has delegated work, poll the session's spawn log so the
+  // delegation branches carry real sub-agent timing as each one finishes. The
+  // spawns are a view onto the run, never a gate: a failure just leaves the
+  // branches as the stream reported them.
+  const hasDelegate = trace.some((s) => s.kind === "delegate");
+  useEffect(() => {
+    if (traceState !== "running" || !hasDelegate || !sessionId) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const spawns = await fetchSpawns(sessionId);
+        if (!cancelled && spawns.length) setTrace((prev) => syncSpawns(prev, spawns));
+      } catch {
+        /* spawns are best-effort */
+      }
+    };
+    void poll();
+    const timer = setInterval(poll, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [traceState, hasDelegate, sessionId]);
 
   const toggleChip = (k: string) => setChips((prev) => ({ ...prev, [k]: !prev[k] }));
+
+  // Roving-tabindex tabs need arrow keys to move between them (ARIA Tabs pattern).
+  const onTablistKeyDown = (e: React.KeyboardEvent) => {
+    const order: Pane[] = ["conversation", "history", "health", "config"];
+    const i = order.indexOf(pane);
+    let next = -1;
+    if (e.key === "ArrowRight") next = (i + 1) % order.length;
+    else if (e.key === "ArrowLeft") next = (i - 1 + order.length) % order.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = order.length - 1;
+    else return;
+    e.preventDefault();
+    const target = order[next];
+    setPane(target);
+    document.getElementById(`tab-${target}`)?.focus();
+  };
 
   const stop = () => abortRef.current?.abort();
 
@@ -147,15 +288,19 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
     turnStreamingRef.current = false;
     onRevealDoneRef.current = null;
     setPhase(IDLE_PHASE);
+    setTrace([]);
+    setTraceState("done");
   };
 
   const newChat = async () => {
     abortRef.current?.abort(); // end any in-flight turn before clearing the view
     resetReveal();
+    setPendingApproval(null);
     try {
       const detail = await createChat(agent.id);
       setSessionId(detail.id);
       setMessages([]);
+      setAwaitingReply(false);
       setError(null);
       setPane("conversation");
       setSessions((prev) => [detail, ...prev]);
@@ -171,12 +316,15 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
     }
     abortRef.current?.abort(); // don't leave a turn streaming into a chat we're leaving
     resetReveal();
+    setPendingApproval(null);
     try {
       const detail = await getChat(id);
       setSessionId(detail.id);
       setMessages(detail.messages.map(toUiMessage));
+      setAwaitingReply(endsUnanswered(detail.messages));
       setError(null);
       setPane("conversation");
+      void syncPendingApproval(detail.id);
     } catch {
       setError("Could not open that chat.");
     }
@@ -188,13 +336,16 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
       const remaining = sessions.filter((s) => s.id !== id);
       setSessions(remaining);
       if (id === sessionId) {
+        setPendingApproval(null);
         if (remaining.length) {
           const detail = await getChat(remaining[0].id);
           setSessionId(detail.id);
           setMessages(detail.messages.map(toUiMessage));
+          setAwaitingReply(endsUnanswered(detail.messages));
         } else {
           setSessionId(null);
           setMessages([]);
+          setAwaitingReply(false);
         }
       }
     } catch {
@@ -299,70 +450,60 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
     });
   };
 
-  const send = async () => {
-    const text = input.trim();
-    if (text.length < 1 || sending) return;
-    setInput("");
-    setError(null);
-    stopListening(); // a voice capture ends when the message is sent
-
-    // An attached file is folded into this turn's text (no server upload).
-    const sent = buildOutgoing(text, attachment);
-
-    // Snapshot the conversation before appending the new turn; roles map
-    // you→user, agent→assistant for the model.
-    const turns: ChatTurn[] = [
-      ...messages.filter((m) => m.role !== "system").map<ChatTurn>((m) => ({
-        role: m.role === "you" ? "user" : "assistant",
-        content: m.body,
-      })),
-      { role: "user", content: sent },
-    ];
-
+  /**
+   * Drive one streamed segment and finalize it. `turns` seeds the model; `resume`
+   * answers a paused approval instead. Assistant text accumulates in `accRef`
+   * across a pause/resume so the whole turn persists as one message.
+   */
+  const runStream = async (turns: ChatTurn[], sid: string, resume?: { id?: string; decision: "approve" | "deny" }) => {
     setSending(true);
     streamActiveRef.current = true;
     turnStreamingRef.current = true;
     reasonFlagsRef.current = { reasoning: 0, text: 0 };
     onRevealDoneRef.current = null;
-    setPhase({ status: "thinking", tools: 0 });
-    setToolRuns([]);
-    setWarnings([]);
-    // Append the user turn and an empty agent bubble that the stream fills.
-    setMessages((prev) => [
-      ...prev,
-      { role: "you", body: sent, files: attachment ? [attachment.name] : undefined, stamp: "just now" },
-      { role: "agent", body: "", stamp: "just now" },
-    ]);
-    setAttachment(null);
+    pausedRef.current = false;
+    if (!resume) {
+      setPhase({ status: "thinking", tools: 0 });
+      setTrace(initTrace());
+      setTraceState("running");
+      setWarnings([]);
+      accRef.current = "";
+    } else {
+      setTraceState("running");
+    }
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-    let sid = sessionId;
-    let acc = "";
     try {
-      if (!sid) {
-        const detail = await createChat(agent.id);
-        sid = detail.id;
-        setSessionId(sid);
-        setSessions((prev) => [detail, ...prev]);
-      }
-      await appendChatMessage(sid, { role: "user", content: text });
-
       await streamAgentChat(
-        { agentId: agent.id, messages: turns, reasoning: chips.reasoning, research: chips.research },
+        {
+          agentId: agent.id,
+          sessionId: sid,
+          messages: turns,
+          resume,
+          reasoning: chips.reasoning,
+          research: chips.research,
+        },
         {
           signal: ctrl.signal,
           onText: (t) => {
-            acc += t;
+            accRef.current += t;
             enqueueReveal("text", t);
+            setTrace((prev) => applyText(prev));
           },
           onTool: (e) => {
-            applyToolEvent(e, setToolRuns, runSeq);
+            setTrace((prev) => (e.phase === "start" ? applyToolStart(prev, e) : applyToolEnd(prev, e)));
             if (e.phase === "start") setPhase((p) => (p.status === "reasoning" || p.status === "generating" ? p : { status: "researching", tools: p.tools + 1 }));
           },
           onWarning: (msg) => setWarnings((prev) => (prev.includes(msg) ? prev : [...prev, msg])),
           onReasoning: (t) => {
             enqueueReveal("reasoning", t);
+            setTrace((prev) => applyReasoning(prev));
+          },
+          onInterrupt: (ev) => {
+            // the run paused for approval — surface it and keep the turn open
+            pausedRef.current = true;
+            setPendingApproval(ev);
           },
         },
       );
@@ -371,6 +512,8 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
       if (aborted) {
         // stop means stop — show what streamed at once rather than finishing the animation
         flushReveal();
+        setTrace((prev) => applyTurnEnd(prev));
+        setTraceState("done");
       } else {
         // flush any partial text, then drop the empty agent bubble so the error
         // reads as its own row instead of a blank one
@@ -380,6 +523,8 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
           return last && last.role === "agent" && last.body === "" ? prev.slice(0, -1) : prev;
         });
         setPhase({ status: "error", tools: 0 });
+        setTrace((prev) => applyTurnError(prev));
+        setTraceState("error");
         const notConfigured = err instanceof LlmError && err.status === 501;
         setError(
           notConfigured
@@ -394,6 +539,12 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
       const finish = () => {
         setPhase((p) => (p.status === "error" ? p : { status: "complete", tools: p.tools }));
         setSending(false);
+        // A run paused for approval is not finished — leave the trace open so
+        // the panel still reads as in-flight behind the approval prompt.
+        if (pausedRef.current) return;
+        // settle the execution trace: mark every running step done and close it
+        setTrace((prev) => applyTurnEnd(prev));
+        setTraceState((s) => (s === "error" ? s : "done"));
       };
       onRevealDoneRef.current = finish;
       // if nothing is left to reveal, or the pump is idle, finalize right away
@@ -403,16 +554,71 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
       }
       streamActiveRef.current = false;
       abortRef.current = null;
+      // A paused run is not finished: keep the accumulated reply and the pending
+      // approval so the operator's decision resumes the SAME turn.
+      if (pausedRef.current) return;
       // persist whatever assistant text streamed (including a partial on stop)
-      if (sid && acc.trim()) {
+      if (accRef.current.trim()) {
         try {
-          await appendChatMessage(sid, { role: "assistant", content: acc });
+          await appendChatMessage(sid, { role: "assistant", content: accRef.current });
           setSessions(await listChats(agent.id));
         } catch {
           /* history save is best-effort; the reply is already on screen */
         }
       }
+      accRef.current = "";
+      setPendingApproval(null);
     }
+  };
+
+  const send = async () => {
+    const text = input.trim();
+    if (text.length < 1 || sending || pendingApproval) return;
+    setInput("");
+    setError(null);
+    setAwaitingReply(false); // this turn's own stream now owns the transcript
+    atBottomRef.current = true; // sending always returns you to your own turn
+    stopListening(); // a voice capture ends when the message is sent
+
+    // An attached file is folded into this turn's text (no server upload).
+    const sent = buildOutgoing(text, attachment);
+
+    // Append the user turn and an empty agent bubble that the stream fills.
+    setMessages((prev) => [
+      ...prev,
+      { role: "you", body: sent, files: attachment ? [attachment.name] : undefined, stamp: "just now" },
+      { role: "agent", body: "", stamp: "just now" },
+    ]);
+    setAttachment(null);
+
+    // The server reads the transcript from its own store, so only the new turn
+    // is sent; a session is created on the fly if this is the first message.
+    let sid = sessionId;
+    if (!sid) {
+      try {
+        const detail = await createChat(agent.id);
+        sid = detail.id;
+        setSessionId(sid);
+        setSessions((prev) => [detail, ...prev]);
+      } catch {
+        setError("Could not start a new chat.");
+        return;
+      }
+    }
+    try {
+      await appendChatMessage(sid, { role: "user", content: text });
+    } catch {
+      /* the turn still streams; persistence is best-effort */
+    }
+    await runStream([{ role: "user", content: sent }], sid);
+  };
+
+  /** Answer a paused run's approval request, resuming the same turn. */
+  const respond = async (decision: "approve" | "deny") => {
+    const approval = pendingApproval;
+    if (!approval || !sessionId || sending) return;
+    setPendingApproval(null);
+    await runStream([], sessionId, { id: approval.id ?? undefined, decision });
   };
 
   /* --- voice input: Web Speech API, feature-detected, no key --- */
@@ -554,11 +760,19 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
           </div>
         </div>
 
-        <div className="seg" role="tablist" aria-label="Agent workspace">
+        <div
+          className="seg"
+          role="tablist"
+          aria-label="Agent workspace"
+          onKeyDown={onTablistKeyDown}
+        >
           <button
             className="seg-btn"
             role="tab"
+            id="tab-conversation"
+            aria-controls="panel-conversation"
             aria-selected={pane === "conversation"}
+            tabIndex={pane === "conversation" ? 0 : -1}
             data-od-id="seg-conversation"
             onClick={() => setPane("conversation")}
           >
@@ -567,7 +781,10 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
           <button
             className="seg-btn"
             role="tab"
+            id="tab-history"
+            aria-controls="panel-history"
             aria-selected={pane === "history"}
+            tabIndex={pane === "history" ? 0 : -1}
             data-od-id="seg-history"
             onClick={() => setPane("history")}
           >
@@ -576,7 +793,10 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
           <button
             className="seg-btn"
             role="tab"
+            id="tab-health"
+            aria-controls="panel-health"
             aria-selected={pane === "health"}
+            tabIndex={pane === "health" ? 0 : -1}
             data-od-id="seg-health"
             onClick={() => setPane("health")}
           >
@@ -585,7 +805,10 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
           <button
             className="seg-btn"
             role="tab"
+            id="tab-config"
+            aria-controls="panel-config"
             aria-selected={pane === "config"}
+            tabIndex={pane === "config" ? 0 : -1}
             data-od-id="seg-config"
             onClick={() => setPane("config")}
           >
@@ -595,7 +818,7 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
 
         <div className="ad-body">
           {pane === "conversation" ? (
-            <div className="chat-pane active" role="tabpanel">
+            <div className="chat-pane active" role="tabpanel" id="panel-conversation" aria-labelledby="tab-conversation">
               {warnings.length ? (
                 <div className="chat-warnings" role="alert">
                   {warnings.map((w, i) => (
@@ -619,35 +842,76 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
                       <circle cx="32" cy="32" r="28" strokeWidth="1" strokeDasharray="2 4" opacity=".28" />
                     </svg>
                   </span>
-                  <span className="greet">Good morning</span>
+                  <span className="greet">{greeting()}</span>
                   <span className="sub">Message this agent about its current task or research focus.</span>
                 </div>
               ) : (
-                <div className="messages" ref={messagesRef}>
-                  {messages.map((m, i) => (
-                    <MessageRow
-                      key={i}
-                      message={m}
-                      onCite={focusNodeByTitle}
-                      phase={i === messages.length - 1 && m.role !== "you" && phase.status !== "idle" ? phase : undefined}
-                    />
-                  ))}
-                  {toolRuns.length ? (
-                    <div className="tool-runs" data-od-id="tool-runs">
-                      {toolRuns.map((tr) => (
-                        <div className={`tool-run is-${tr.status}`} key={tr.key}>
-                          <span className="tr-icon">
-                            <IconBolt />
-                          </span>
-                          <span className="tr-name">{tr.name}</span>
-                          <span className="tr-status">
-                            {tr.status === "running" ? "running…" : tr.status === "error" ? "failed" : "done"}
-                          </span>
-                          {tr.args && Object.keys(tr.args).length ? (
-                            <span className="tr-args">{formatArgs(tr.args)}</span>
-                          ) : null}
-                        </div>
-                      ))}
+                <div className="messages" ref={messagesRef} onScroll={onMessagesScroll}>
+                  {messages.map((m, i) => {
+                    const isLast = i === messages.length - 1;
+                    // The execution trace is the active turn's: it sits between
+                    // the user turn and the agent's reply. On error the empty
+                    // agent bubble is dropped, so it falls in after the user turn.
+                    const active = trace.length > 0 && phase.status !== "idle" && isLast;
+                    const showTraceBefore = active && m.role === "agent";
+                    const showTraceAfter = active && m.role === "you" && traceState === "error";
+                    return (
+                      <Fragment key={i}>
+                        {showTraceBefore ? (
+                          <AgentExecutionTimeline steps={trace} state={traceState} agentName={agent.name} />
+                        ) : null}
+                        <MessageRow
+                          message={m}
+                          onCite={focusNodeByTitle}
+                          phase={isLast && m.role !== "you" && phase.status !== "idle" ? phase : undefined}
+                          suppressIndicator={showTraceBefore}
+                        />
+                        {showTraceAfter ? (
+                          <AgentExecutionTimeline steps={trace} state={traceState} agentName={agent.name} />
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                  {awaitingReply && !sending ? (
+                    // The transcript ends on an unanswered user turn — its run is
+                    // still finishing server-side; this polls and fills it in.
+                    <div className="await-reply" data-od-id="awaiting-reply" role="status" aria-live="polite">
+                      <span className="ax-live" aria-hidden />
+                      The agent is still working on this — its reply will appear here.
+                    </div>
+                  ) : null}
+                  {pendingApproval ? (
+                    <div className="approval" data-od-id="approval-prompt" role="alertdialog" aria-label="Tool approval required" ref={approvalRef} tabIndex={-1}>
+                      <div className="approval-head">
+                        <span className="approval-icon">
+                          <IconBolt />
+                        </span>
+                        <span className="approval-title">
+                          {pendingApproval.tool === "run_command" ? "Run this command?" : `Run ${pendingApproval.tool ?? "this tool"}?`}
+                        </span>
+                      </div>
+                      {Object.keys(pendingApproval.args).length ? (
+                        <pre className="approval-cmd">{String(pendingApproval.args.command ?? formatArgs(pendingApproval.args))}</pre>
+                      ) : null}
+                      <div className="approval-actions">
+                        <button
+                          type="button"
+                          className="reg-btn"
+                          disabled={sending}
+                          onClick={() => void respond("deny")}
+                        >
+                          Deny
+                        </button>
+                        <button
+                          type="button"
+                          className="approve-btn"
+                          disabled={sending}
+                          onClick={() => void respond("approve")}
+                        >
+                          <IconCheck />
+                          Approve
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                   {error ? (
@@ -667,6 +931,7 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
                   <textarea
                     className="chat-textarea"
                     rows={1}
+                    aria-label="Message this agent"
                     placeholder="Message this agent"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
@@ -751,7 +1016,7 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
           ) : null}
 
           {pane === "history" ? (
-            <div className="chat-pane active" role="tabpanel" data-od-id="chat-history">
+            <div className="chat-pane active" role="tabpanel" id="panel-history" aria-labelledby="tab-history" data-od-id="chat-history">
               {sessions.length ? (
                 sessions.map((s) => (
                   <div className={`hist-row ${s.id === sessionId ? "is-active" : ""}`} key={s.id}>
@@ -781,29 +1046,37 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
           ) : null}
 
           {pane === "health" ? (
-            <div className="chat-pane active" role="tabpanel" data-od-id="agent-healthcheck">
+            <div className="chat-pane active" role="tabpanel" id="panel-health" aria-labelledby="tab-health" data-od-id="agent-healthcheck">
               <div className="pane-health active">
                 <div className="ah-sec">
                   <h3>Resource meters</h3>
-                  {h.meters.map((m) => (
-                    <div className="ah-meter" key={m.k}>
-                      <span className="m-k">{m.k}</span>
-                      <span className="m-track">
-                        <span className="m-fill" style={{ width: `${m.pct}%` }} />
-                      </span>
-                      <span className="m-v">{m.v}</span>
-                    </div>
-                  ))}
+                  {h.meters.length ? (
+                    h.meters.map((m) => (
+                      <div className="ah-meter" key={m.k}>
+                        <span className="m-k">{m.k}</span>
+                        <span className="m-track">
+                          <span className="m-fill" style={{ width: `${m.pct}%` }} />
+                        </span>
+                        <span className="m-v">{m.v}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="ah-empty">No runtime meters reported yet.</div>
+                  )}
                 </div>
                 <div className="ah-sec">
                   <h3>Recent heartbeats</h3>
-                  {h.beats.map((b, i) => (
-                    <div className="ah-beat" key={i}>
-                      <span className={`ah-dot ${b.cls}`} />
-                      <span className="ah-time">{b.time}</span>
-                      <span className="ah-text">{b.text}</span>
-                    </div>
-                  ))}
+                  {h.beats.length ? (
+                    h.beats.map((b, i) => (
+                      <div className="ah-beat" key={i}>
+                        <span className={`ah-dot ${b.cls}`} />
+                        <span className="ah-time">{b.time}</span>
+                        <span className="ah-text">{b.text}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="ah-empty">No heartbeat telemetry yet.</div>
+                  )}
                 </div>
                 <div className="ah-sec">
                   <h3>Incidents</h3>
@@ -814,7 +1087,7 @@ export function AgentDetail({ agent, onBack }: { agent: Agent; onBack: () => voi
                       </div>
                     ))
                   ) : (
-                    <div className="ah-empty">No incidents in the last 30 days.</div>
+                    <div className="ah-empty">No incident telemetry reported.</div>
                   )}
                 </div>
               </div>
@@ -863,6 +1136,24 @@ function toUiMessage(m: ChatSessionMessage): ChatMessage {
   };
 }
 
+/** True when the transcript's last real turn is an unanswered user message —
+ *  i.e. the run that turn belongs to has not persisted its reply yet. */
+function endsUnanswered(msgs: ChatSessionMessage[]): boolean {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === "user") return true;
+    if (msgs[i].role === "assistant") return false;
+  }
+  return false;
+}
+
+/** Time-of-day greeting for the empty conversation state. */
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 function relativeTime(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return "just now";
@@ -875,29 +1166,7 @@ function relativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
-/** Fold a tool start/end event into the run list (end updates the active run). */
-function applyToolEvent(
-  e: ToolStreamEvent,
-  setRuns: (updater: (prev: ToolRun[]) => ToolRun[]) => void,
-  seq: { current: number },
-): void {
-  if (e.phase === "start") {
-    const key = `${e.name}-${seq.current++}`;
-    setRuns((prev) => [...prev, { key, name: e.name, args: e.args, status: "running" }]);
-    return;
-  }
-  setRuns((prev) => {
-    const copy = prev.slice();
-    for (let i = copy.length - 1; i >= 0; i--) {
-      if (copy[i].name === e.name && copy[i].status === "running") {
-        copy[i] = { ...copy[i], status: e.error ? "error" : "done", result: e.result };
-        break;
-      }
-    }
-    return copy;
-  });
-}
-
+/** Format a tool's args for the approval prompt's command preview. */
 function formatArgs(args: Record<string, unknown>): string {
   const parts: string[] = [];
   for (const [k, v] of Object.entries(args)) {
@@ -980,7 +1249,20 @@ function ActivityIndicator({ phase }: { phase: AgentPhase }) {
   );
 }
 
-function MessageRow({ message, onCite, phase }: { message: ChatMessage; onCite: (t: string) => void; phase?: AgentPhase }) {
+/** Memoized so the typewriter reveal — which replaces only the last message
+ *  object each frame — does not re-render every earlier row in a long chat. */
+const MessageRow = memo(function MessageRow({
+  message,
+  onCite,
+  phase,
+  suppressIndicator,
+}: {
+  message: ChatMessage;
+  onCite: (t: string) => void;
+  phase?: AgentPhase;
+  /** the execution timeline above this row already shows the working state */
+  suppressIndicator?: boolean;
+}) {
   const role = message.role === "you" ? "you" : "agent";
   // LLM output is untrusted: render the safe markdown subset, no raw HTML.
   const html = useMemo(
@@ -998,7 +1280,7 @@ function MessageRow({ message, onCite, phase }: { message: ChatMessage; onCite: 
   const working = status === "thinking" || status === "researching";
   const hasReasoning = (message.reasoning?.length ?? 0) > 0;
   const hasBody = message.body.length > 0;
-  const showIndicator = working && !hasReasoning && !hasBody;
+  const showIndicator = !suppressIndicator && working && !hasReasoning && !hasBody;
 
   // reasoning is forced open while it streams, then collapses on its own; the
   // user can still toggle it afterwards (derived — no effect needed)
@@ -1009,7 +1291,7 @@ function MessageRow({ message, onCite, phase }: { message: ChatMessage; onCite: 
     <div className={`message ${role}`}>
       <div className="message-head">
         <span className={`author ${role}`}>{role === "you" ? "You" : message.role === "system" ? "System" : "Agent"}</span>
-        {phase && STATE_LABEL[status] ? <span className={`agent-state is-${status}`}>{STATE_LABEL[status]}</span> : null}
+        {phase && !suppressIndicator && STATE_LABEL[status] ? <span className={`agent-state is-${status}`}>{STATE_LABEL[status]}</span> : null}
         {message.stamp ? <span className="timestamp">{message.stamp}</span> : null}
       </div>
       {showIndicator ? <ActivityIndicator phase={phase!} /> : null}
@@ -1052,4 +1334,4 @@ function MessageRow({ message, onCite, phase }: { message: ChatMessage; onCite: 
       ) : null}
     </div>
   );
-}
+});

@@ -36,79 +36,78 @@ export function SignUpForm() {
   }
 
   return (
-    <form className="auth-panel" onSubmit={onSubmit} noValidate>
-      <div className="auth-card">
-        <div className="auth-card-head">
-          <h2>Create your account</h2>
-          <p>Start with your operator credentials.</p>
-        </div>
-        <div className="auth-fields">
-          {error ? (
-            <p className="auth-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="auth-field">
-            <label htmlFor="signup-name">Full name</label>
-            <input
-              id="signup-name"
-              type="text"
-              autoComplete="name"
-              placeholder="Your name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-          <div className="auth-field">
-            <label htmlFor="signup-email">Work email</label>
-            <input
-              id="signup-email"
-              type="email"
-              autoComplete="email"
-              placeholder="operator@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="auth-field">
-            <label htmlFor="signup-password">Create password</label>
-            <input
-              id="signup-password"
-              type="password"
-              autoComplete="new-password"
-              placeholder="Minimum 8 characters"
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <label className="auth-check auth-check-terms">
-            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} required />I agree to
-            the{" "}
-            <a className="auth-link" href="#">
-              Terms of Use
-            </a>{" "}
-            and{" "}
-            <a className="auth-link" href="#">
-              Privacy Policy
-            </a>
-            .
-          </label>
-          <button className="auth-submit" type="submit" disabled={submitting}>
-            {submitting ? "Provisioning…" : "Create operator account"}
-            <span aria-hidden="true">{submitting ? "·" : <IconArrowRight style={{ width: 18, height: 18 }} />}</span>
-          </button>
-        </div>
-        <div className="auth-card-foot">
-          Already have an account?{" "}
-          <Link href="/login" style={{ color: "var(--ink)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3 }}>
-            Log in to your workspace
-          </Link>
-        </div>
+    <form className="authf" onSubmit={onSubmit} noValidate>
+      <div className="authf-head">
+        <span className="authf-head-label">Create account</span>
+        <Link className="authf-head-alt" href="/login">
+          Have an account?
+        </Link>
       </div>
+
+      {error ? (
+        <p className="authf-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <label className="authf-field">
+        <span className="authf-label">Full name</span>
+        <input
+          className="authf-input"
+          type="text"
+          autoComplete="name"
+          placeholder="Your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+      </label>
+
+      <label className="authf-field">
+        <span className="authf-label">Work email</span>
+        <input
+          className="authf-input"
+          type="email"
+          autoComplete="email"
+          placeholder="operator@company.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+      </label>
+
+      <label className="authf-field">
+        <span className="authf-label">Create password</span>
+        <input
+          className="authf-input"
+          type="password"
+          autoComplete="new-password"
+          placeholder="Minimum 8 characters"
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+      </label>
+
+      <label className="authf-check authf-check-terms">
+        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} required />I agree to the{" "}
+        <a className="authf-link" href="#">
+          Terms of Use
+        </a>{" "}
+        and{" "}
+        <a className="authf-link" href="#">
+          Privacy Policy
+        </a>
+        .
+      </label>
+
+      <button className="authf-submit" type="submit" disabled={submitting}>
+        {submitting ? "Provisioning…" : "Create operator account"}
+        <span aria-hidden="true" className="authf-submit-arrow">
+          {submitting ? "·" : <IconArrowRight style={{ width: 18, height: 18 }} />}
+        </span>
+      </button>
     </form>
   );
 }

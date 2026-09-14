@@ -57,9 +57,8 @@ export function ActivityView() {
       <div className="panel-header">
         <h2>Activity</h2>
         <div className="graph-meta">
-          <span className="legend-item">
-            <span className="h-dot" />
-            LIVE
+          <span className="grp-tag" title="Cron history and metrics are sample data until the runtime feed is wired">
+            sample
           </span>
           <span className="dot">·</span>
           <span>

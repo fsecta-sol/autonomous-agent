@@ -16,7 +16,7 @@ export function ProfileView() {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     saveProfile({ name: name.trim(), email: email.trim(), role: role.trim() });
-    setStatus("Profile saved");
+    setStatus("Saved in this browser");
     setSaved(true);
   }
 

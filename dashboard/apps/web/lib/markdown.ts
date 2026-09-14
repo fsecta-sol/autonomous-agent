@@ -8,16 +8,18 @@ export function esc(s: string): string {
 export interface MarkdownOptions {
   /** render a `[[wikilink]]`; receives the already-escaped label. */
   wiki?: (escapedLabel: string) => string;
-  /** allow raw `<div>`/`<table>` passthrough. Off for untrusted text (LLM output). */
+  /** allow raw `<div>`/`<table>` passthrough. Defaults OFF; opt in only for
+   *  app-authored content you trust, never for LLM or user text. */
   allowRawHtml?: boolean;
 }
 
 /**
  * Tiny markdown → html renderer, safe subset for the vault's own files:
  * escape-first, then a narrow inline allowlist (code, wikilinks, bold).
+ * Raw HTML passthrough is off unless the caller explicitly opts in.
  */
 export function renderMarkdown(src: string, opts: MarkdownOptions = {}): string {
-  const allowRawHtml = opts.allowRawHtml !== false;
+  const allowRawHtml = opts.allowRawHtml === true;
   const wiki = opts.wiki ?? ((label: string) => `<span class="rd-wiki">${label}</span>`);
   const lines = src.split("\n");
   let html = "";

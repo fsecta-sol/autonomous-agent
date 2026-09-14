@@ -10,6 +10,17 @@ export interface ToolStreamEvent {
   error?: boolean;
 }
 
+/** A run paused for the operator's approval before running a tool. */
+export interface InterruptEvent {
+  type: "interrupt";
+  /** correlation id echoed back on resume */
+  id: string | null;
+  /** the tool awaiting approval (e.g. "run_command") */
+  tool: string | null;
+  args: Record<string, unknown>;
+  message: string;
+}
+
 export interface StreamHandlers {
   /** a streamed answer delta */
   onText?: (text: string) => void;
@@ -19,6 +30,8 @@ export interface StreamHandlers {
   onTool?: (event: ToolStreamEvent) => void;
   /** a non-fatal notice from the server (e.g. an unsandboxed-run warning) */
   onWarning?: (message: string) => void;
+  /** the run paused awaiting approval; resume with `{ resume: { decision } }` */
+  onInterrupt?: (event: InterruptEvent) => void;
   signal?: AbortSignal;
 }
 
@@ -32,6 +45,8 @@ interface StreamEnvelope {
   args?: Record<string, unknown>;
   result?: string;
   error?: boolean;
+  id?: string | null;
+  tool?: string | null;
 }
 
 /**
@@ -79,6 +94,14 @@ async function consumeStream(body: ReadableStream<Uint8Array>, handlers: StreamH
           });
         } else if (ev.type === "warning" && typeof ev.message === "string") {
           handlers.onWarning?.(ev.message);
+        } else if (ev.type === "interrupt") {
+          handlers.onInterrupt?.({
+            type: "interrupt",
+            id: ev.id ?? null,
+            tool: ev.tool ?? null,
+            args: ev.args ?? {},
+            message: typeof ev.message === "string" ? ev.message : "Approval required.",
+          });
         } else if (ev.type === "error") {
           throw new LlmError("http", typeof ev.message === "string" ? ev.message : "Stream error", 1);
         }

@@ -84,6 +84,7 @@ export function ThoughtThread({ thought, running, error, retrying, onBack, onFol
           <textarea
             className="rc-input"
             rows={1}
+            aria-label="Ask a follow-up about this thought"
             placeholder="Ask a follow-up about this thought…"
             value={input}
             onChange={(e) => setInput(e.target.value)}

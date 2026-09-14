@@ -117,6 +117,11 @@ export interface StreamChatRequest {
   /** optional model override; the server falls back to LLM_MODEL */
   model?: string;
   messages: ChatTurn[];
+  /** the chat session; the server uses it as the durable thread id and reads
+   *  its own persisted transcript from it */
+  sessionId?: string;
+  /** answer a paused run's approval interrupt instead of sending a new turn */
+  resume?: { id?: string; decision: "approve" | "deny" };
   /** ask the model to work through the problem step by step */
   reasoning?: boolean;
   /** run a deeper, source-seeking pass before answering */
@@ -127,8 +132,10 @@ export interface StreamChatRequest {
  * Streams a chat completion through the server proxy. Text deltas arrive on
  * `onText`; as the agent runs tools, `onTool` fires for each start/end. Which
  * tools are available is the agent's server-side configuration, not a client
- * choice. The API key never leaves the server; this is a same-origin call.
- * Throws an {@link LlmError} with `status === 501` when the server has no key.
+ * choice. When a run pauses for approval, `onInterrupt` fires and the stream
+ * ends; resume with a new call carrying `resume`. The API key never leaves the
+ * server; this is a same-origin call. Throws an {@link LlmError} with
+ * `status === 501` when the server has no key.
  */
 export async function streamAgentChat(req: StreamChatRequest, handlers: StreamHandlers): Promise<void> {
   return streamChatRequest("/api/chat", { ...req, model: req.model || readConnection().model }, handlers);
@@ -408,6 +415,65 @@ export async function createChat(agentId: string, model?: string): Promise<ChatS
 
 export async function getChat(id: string): Promise<ChatSessionDetail> {
   return jsonOrThrow<ChatSessionDetail>(await fetch(`/api/chats/${id}`));
+}
+
+/** A pending approval on a session's run, if it is paused. */
+export interface ChatRunState {
+  paused: boolean;
+  interrupt: { id: string | null; tool: string | null; args: Record<string, unknown>; message: string } | null;
+}
+
+/** Whether this session's run is paused awaiting tool approval. */
+export async function getChatState(id: string): Promise<ChatRunState> {
+  return jsonOrThrow<ChatRunState>(await fetch(`/api/chats/${encodeURIComponent(id)}/state`));
+}
+
+/** Every chat session across all agents, newest first (for the run list). */
+export async function listAllChats(): Promise<ChatSession[]> {
+  const res = await fetch("/api/chats");
+  const data = await jsonOrThrow<{ sessions: ChatSession[] }>(res);
+  return data.sessions;
+}
+
+/** One sub-agent spawn of an orchestrator session. */
+export interface SpawnEvent {
+  id: string | null;
+  role: string;
+  goal: string;
+  status: "running" | "done" | "timed_out" | "error";
+  /** epoch ms; absent for spawns read from an old checkpoint (no log entry) */
+  startedAt?: number;
+  finishedAt?: number | null;
+  result?: string | null;
+}
+
+/**
+ * The sub-agents an orchestrator session has spawned, oldest first. Reads the
+ * agent's spawn log (real timestamps); older sessions fall back to the
+ * checkpoint, whose entries carry no times.
+ */
+export async function fetchSpawns(sessionId: string): Promise<SpawnEvent[]> {
+  const res = await fetch(`/api/chats/${encodeURIComponent(sessionId)}/spawns`);
+  const data = await jsonOrThrow<{ spawns: Array<Record<string, unknown>> }>(res);
+  return data.spawns.map(normalizeSpawn);
+}
+
+function normalizeSpawn(raw: Record<string, unknown>): SpawnEvent {
+  const status = raw.status;
+  const validStatus: SpawnEvent["status"] =
+    status === "running" || status === "done" || status === "timed_out" || status === "error" ? status : "done";
+  const started = raw.started_at ?? raw.startedAt;
+  const finished = raw.finished_at ?? raw.finishedAt;
+  return {
+    id: typeof raw.id === "string" ? raw.id : null,
+    role: typeof raw.role === "string" ? raw.role : "sub-agent",
+    goal: typeof raw.goal === "string" ? raw.goal : "",
+    status: validStatus,
+    // the log stores seconds; the checkpoint fallback has no time at all
+    startedAt: typeof started === "number" ? started * 1000 : undefined,
+    finishedAt: typeof finished === "number" ? finished * 1000 : null,
+    result: typeof raw.result === "string" ? raw.result : null,
+  };
 }
 
 export async function appendChatMessage(

@@ -783,6 +783,9 @@
   letter-spacing: 0.08em;
   margin: 0;
 }
+.fa-head .grp-tag {
+  margin-left: auto;
+}
 .fa-live {
   display: inline-flex;
   align-items: center;
@@ -816,13 +819,13 @@
   align-items: start;
   padding: 8px 12px;
   border-bottom: 1px solid var(--hairline);
-  cursor: pointer;
   transition: background 0.15s var(--ease);
 }
 .fa-item:last-child {
   border-bottom: 0;
 }
-.fa-item:hover {
+.fa-item:hover,
+.fa-item:focus-within {
   background: var(--surface);
 }
 .fa-item.is-new {
@@ -853,6 +856,18 @@
 }
 .fa-body {
   min-width: 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.fa-body:disabled {
+  cursor: default;
+}
+.fa-body:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .fa-text {
   font-size: 11px;
@@ -876,11 +891,12 @@
   gap: 4px;
   grid-column: 2 / 4;
 }
-.fa-item:hover .fa-actions {
+.fa-item:hover .fa-actions,
+.fa-item:focus-within .fa-actions {
   display: flex;
 }
 .fa-btn {
-  padding: 3px 7px;
+  padding: 5px 9px;
   border: 1px solid var(--hairline);
   font-size: 9px;
   text-transform: uppercase;
@@ -1257,20 +1273,19 @@
   font-size: 14px;
   line-height: 21px;
   padding: 9px 13px;
-  border-radius: 14px !important;
   border: 1px solid var(--hairline);
   background: var(--surface);
   color: var(--ink);
   overflow-wrap: anywhere;
 }
 .message.agent .message-body {
-  border-bottom-left-radius: 4px !important;
+  border-bottom-left-radius: 0 !important;
 }
 .message.you .message-body {
   background: var(--ink);
   color: var(--bg);
   border-color: var(--ink);
-  border-bottom-right-radius: 4px !important;
+  border-bottom-right-radius: 0 !important;
 }
 /* the model's streamed reasoning — quiet, collapsed once the turn settles */
 /* agent lifecycle: status word in the message head */
@@ -1298,8 +1313,6 @@
   padding: 8px 13px;
   border: 1px solid var(--hairline);
   background: var(--surface);
-  border-radius: 14px !important;
-  border-bottom-left-radius: 4px !important;
   animation: fa-in 0.2s var(--ease);
 }
 .aw-dots {
@@ -1430,13 +1443,11 @@
   font-family: var(--font-plex-mono), monospace;
   font-size: 12px;
   background: color-mix(in srgb, var(--muted) 16%, transparent);
-  border-radius: 3px;
   padding: 1px 4px;
 }
 .message-body.md pre {
   background: color-mix(in srgb, var(--muted) 16%, transparent);
   border: 1px solid var(--hairline);
-  border-radius: 6px;
   padding: 10px 12px;
   overflow-x: auto;
   margin: 0 0 8px;
@@ -1470,67 +1481,580 @@
   background: currentColor;
   animation: blink 1s step-start infinite;
 }
-/* tool activity cards shown while an agent runs tools */
-.tool-runs {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 76%;
-  margin: 2px auto 0 0;
-}
-.tool-run {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+/* ── execution timeline ───────────────────────────────────────────────
+   The live trace of what the agent is doing, folded from the stream. A
+   vertical hairline spine carries small circular nodes (the one shape the
+   system reserves for data); every state is a node mark, never chrome. */
+.ax-timeline {
+  align-self: stretch;
+  max-width: 100%;
   border: 1px solid var(--hairline);
-  border-radius: 10px;
-  background: var(--surface);
-  font-size: 11px;
+  background: color-mix(in srgb, var(--muted) 4%, transparent);
+  padding: 10px 12px 12px;
+  animation: fa-in 0.22s var(--ease);
+}
+.ax-timeline.is-settled,
+.ax-timeline[data-state="done"] {
+  background: transparent;
+}
+.ax-timeline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 9px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--hairline);
+}
+.ax-tl-label {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.ax-tl-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--muted);
 }
-.tool-run .tr-icon {
+.ax-tl-summary.is-running {
+  color: var(--accent);
+}
+.ax-tl-summary.is-error {
+  color: var(--l-error);
+}
+.ax-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50% !important;
+  background: var(--accent);
+  animation: ax-pulse 1.4s var(--ease) infinite;
+}
+.ax-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+}
+/* a collapsible section of the trace */
+.ax-group {
+  display: flex;
+  flex-direction: column;
+}
+.ax-group-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 0;
+  color: var(--muted);
+  transition: color 0.15s var(--ease);
+}
+.ax-group-head:hover {
+  color: var(--ink);
+}
+.ax-group-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transform: rotate(90deg);
+  transition: transform 0.15s var(--ease);
+  flex: 0 0 auto;
+}
+.ax-group[data-open] .ax-group-caret {
+  transform: rotate(90deg) translateX(-1px);
+}
+.ax-group:not([data-open]) .ax-group-caret {
+  transform: rotate(0);
+}
+.ax-group-label {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--label);
+}
+.ax-group[data-state="running"] .ax-group-label {
+  color: var(--ink);
+  font-weight: 600;
+}
+.ax-group[data-state="error"] .ax-group-label {
+  color: var(--l-error);
+}
+.ax-group-count {
+  margin-left: auto;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.75;
+}
+.ax-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 2px;
+  display: flex;
+  flex-direction: column;
+}
+.ax-steps.is-collapsed {
+  display: none;
+}
+/* one activity on the spine */
+.ax-step {
+  position: relative;
   display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  padding-bottom: 13px;
+  animation: ax-step-in 0.34s var(--ease) both;
+}
+.ax-step:last-child {
+  padding-bottom: 0;
+}
+.ax-rail {
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--hairline);
+}
+.ax-step:first-child .ax-rail {
+  top: 15px;
+}
+.ax-step:last-child .ax-rail {
+  bottom: calc(100% - 15px);
+}
+/* the status node — a data dot on the spine */
+.ax-node {
+  position: relative;
+  z-index: 1;
+  grid-column: 1;
+  width: 13px;
+  height: 13px;
+  margin: 5px auto 0;
+  border-radius: 50% !important;
+  border: 1.3px solid var(--hairline);
+  background: var(--bg);
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.ax-node[data-state="done"] {
+  border-color: color-mix(in srgb, var(--muted) 70%, transparent);
+  background: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+.ax-node[data-state="error"] {
+  border-color: var(--l-error);
+  background: var(--l-error);
+}
+/* A running node animates, but only the *current* step carries Instrument-Blue
+   — so a run with parallel activities still shows one active marker, never two
+   competing ones (One Voice Rule). Non-current running nodes spin in ink. */
+.ax-node[data-state="running"] {
+  border-color: var(--hairline);
+}
+.ax-node[data-state="running"]::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50% !important;
+  background: var(--ink);
+}
+.ax-node[data-state="running"]::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50% !important;
+  border: 1.5px solid transparent;
+  border-top-color: var(--ink);
+  border-right-color: var(--ink);
+  animation: ax-spin 0.9s linear infinite;
+}
+.ax-step[data-current] .ax-node[data-state="running"] {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--hairline));
+}
+.ax-step[data-current] .ax-node[data-state="running"]::before {
+  background: var(--accent);
+}
+.ax-step[data-current] .ax-node[data-state="running"]::after {
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+}
+.ax-step[data-current] .ax-node {
+  animation: ax-glow 1.8s var(--ease) infinite;
+}
+/* the step body */
+.ax-body {
+  grid-column: 2;
+  min-width: 0;
+  padding-top: 3px;
+}
+.ax-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.ax-kind {
+  display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
+  color: var(--muted);
 }
-.tool-run .tr-icon svg {
-  width: 12px;
-  height: 12px;
+.ax-step[data-state="running"] .ax-kind {
+  color: var(--ink);
+}
+.ax-step[data-state="error"] .ax-kind {
+  color: var(--l-error);
+}
+.ax-kind svg {
+  width: 13px;
+  height: 13px;
   display: block;
 }
-.tool-run .tr-name {
+.ax-agent {
   flex: 0 0 auto;
-  color: var(--ink);
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 15px;
+  padding: 0 3px;
+  border: 1px solid var(--hairline);
   font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
-.tool-run .tr-args {
-  flex: 1 1 auto;
+.ax-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--muted);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0.75;
 }
-.tool-run .tr-status {
+.ax-step[data-state="running"] .ax-title {
+  color: var(--ink);
+  font-weight: 600;
+}
+.ax-step[data-state="error"] .ax-title {
+  color: var(--l-error);
+}
+.ax-dur {
   flex: 0 0 auto;
   margin-left: auto;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+.ax-desc {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  /* a long goal/query stays scannable; full text is on hover + the branch rows */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ax-step[data-state="running"] .ax-desc {
+  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
+}
+/* the tool/action meta row */
+.ax-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid var(--hairline);
+}
+.ax-tool-name {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  color: var(--label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.ax-tool-count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-family: var(--font-plex-mono), monospace;
   font-size: 9px;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
-.tool-run.is-running .tr-icon {
+/* delegation branches — live sub-agents under a delegate step */
+.ax-branches {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ax-branch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0 4px 14px;
+  min-width: 0;
+  animation: ax-step-in 0.3s var(--ease) both;
+}
+.ax-branch::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  border-left: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+.ax-branch:first-child::before {
+  border-top-left-radius: 0;
+}
+.ax-branch:last-child::before {
+  border-bottom-color: transparent;
+}
+.ax-branch-node {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50% !important;
+  background: var(--muted);
+  opacity: 0.6;
+}
+.ax-branch[data-state="running"] .ax-branch-node {
+  background: var(--ink);
+  opacity: 1;
+  animation: ax-pulse 1.4s var(--ease) infinite;
+}
+.ax-branch[data-state="error"] .ax-branch-node {
+  background: var(--l-error);
+  opacity: 1;
+}
+.ax-branch .ax-agent {
+  min-width: 15px;
+  height: 14px;
+  font-size: 9px;
+}
+.ax-branch-label {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.ax-branch-status {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.85;
+}
+.ax-branch[data-state="running"] .ax-branch-status {
   color: var(--ink);
-  animation: blink 1s step-start infinite;
 }
-.tool-run.is-done .tr-status {
-  color: var(--ink);
-}
-.tool-run.is-error {
-  border-color: var(--l-error);
-}
-.tool-run.is-error .tr-status {
+.ax-branch[data-state="error"] .ax-branch-status {
   color: var(--l-error);
+}
+/* a compact result preview under a tool step */
+.ax-result {
+  margin-top: 6px;
+  border: 1px solid var(--hairline);
+  background: var(--bg);
+}
+.ax-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+.ax-result-k {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ax-step[data-state="error"] .ax-result-k {
+  color: var(--l-error);
+}
+.ax-result-toggle {
+  margin-left: auto;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--label);
+  transition: color 0.15s var(--ease);
+}
+.ax-result-toggle:hover {
+  color: var(--accent);
+}
+.ax-result-body {
+  margin: 0;
+  padding: 7px 9px;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 132px;
+  overflow-y: auto;
+}
+.ax-result[data-expanded] .ax-result-body {
+  max-height: none;
+}
+@keyframes ax-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ax-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes ax-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 34%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+}
+@keyframes ax-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* narrow: drop secondary metadata, keep [state] activity + a short line */
+@media (max-width: 640px) {
+  .ax-timeline {
+    padding: 9px 10px 10px;
+  }
+  .ax-dur,
+  .ax-tool-count,
+  .ax-branch-status {
+    display: none;
+  }
+  .ax-step {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+  .ax-rail {
+    left: 10px;
+  }
+}
+/* a run paused for the operator's approval before running a tool */
+.approval {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 76%;
+  margin: 4px auto 4px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink);
+}
+.approval-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+.approval-icon svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+.approval-title {
+  font-weight: 500;
+}
+.approval-cmd {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  background: var(--bg);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+.approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.approve-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.approve-btn:hover {
+  filter: brightness(1.08);
+}
+.approve-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.approve-btn svg {
+  width: 12px;
+  height: 12px;
+  display: block;
 }
 /* runtime warnings shown above the conversation (e.g. unsandboxed runs) */
 .chat-warnings {
@@ -1546,6 +2070,21 @@
   font-size: 11px;
   line-height: 1.5;
   color: var(--ink);
+}
+/* shown when a loaded transcript ends on an unanswered turn whose run is still
+   finishing — the reply is polled in from the server rather than left missing */
+.await-reply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  max-width: 76%;
+  padding: 8px 12px;
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--muted) 6%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }
 /* per-agent configuration pane */
 .cfg-pane {
@@ -1860,7 +2399,6 @@
 .af-field input:focus,
 .af-field select:focus {
   border-color: var(--accent);
-  outline: none;
 }
 .af-inline {
   margin-bottom: 8px;
@@ -1977,7 +2515,6 @@
 .reg-input:focus,
 .reg-textarea:focus {
   border-color: var(--accent);
-  outline: none;
 }
 .reg-textarea {
   resize: vertical;
@@ -2698,7 +3235,7 @@
 }
 .grp-tag {
   font-family: var(--font-plex-mono), monospace;
-  font-size: 8px;
+  font-size: 9px;
   border: 1px solid var(--hairline);
   padding: 0 3px;
   color: var(--muted);
@@ -2880,7 +3417,7 @@
 .act-metric {
   margin-top: 7px;
   font-family: var(--font-plex-mono), monospace;
-  font-size: 23px;
+  font-size: 24px;
   letter-spacing: -0.06em;
   font-variant-numeric: tabular-nums;
 }
@@ -3119,7 +3656,7 @@
   margin-left: 5px;
   padding: 1px 3px;
   border: 1px solid var(--hairline);
-  font-size: 8px;
+  font-size: 9px;
 }
 .activity-empty {
   padding: 18px 12px;
@@ -3243,7 +3780,6 @@
   transition: border-color 0.15s var(--ease);
 }
 .rt-filter:focus {
-  outline: none;
   border-color: var(--ink);
 }
 .rt-fchips {
@@ -3359,7 +3895,7 @@
 }
 .rd-thread-head h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.35;
   font-weight: 600;
 }
@@ -3458,7 +3994,6 @@
 .graph-mode select:hover,
 .graph-mode select:focus-visible {
   border-color: var(--ink);
-  outline: none;
 }
 .legend-item {
   font-size: 11px;
@@ -3943,7 +4478,7 @@
 .rd-doc blockquote {
   margin: 12px 0;
   padding: 2px 0 2px 14px;
-  border-left: 3px solid var(--ink);
+  border-left: 1px solid var(--muted);
   color: var(--muted);
 }
 .rd-doc strong {
@@ -4354,7 +4889,7 @@
 }
 .orch-head h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 24px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -4566,6 +5101,258 @@
 }
 .orch-blk.run {
   background: var(--accent);
+}
+/* --- orchestration: runs split view --- */
+.orch-split {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.orch-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.orch-run {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  text-align: left;
+}
+.orch-run:hover {
+  border-color: var(--muted);
+}
+.orch-run.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.orr-title {
+  font-size: 12px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orr-meta {
+  font-size: 10px;
+  font-family: var(--font-plex-mono), monospace;
+  color: var(--muted);
+}
+.orch-canvas {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+/* --- spawn tree --- */
+.spawn-tree {
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  padding: 10px 12px;
+}
+.st-root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 8px;
+}
+.st-root-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.st-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-family: var(--font-plex-mono), monospace;
+  color: var(--muted);
+}
+.st-children {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 16px;
+  border-left: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.st-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  text-align: left;
+}
+.st-node:hover {
+  background: var(--bg);
+}
+.st-node.is-sel {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.st-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.st-dot.is-root {
+  background: var(--accent);
+}
+.st-dot.is-running {
+  background: var(--accent);
+  animation: blink 1s step-start infinite;
+}
+.st-dot.is-done {
+  background: var(--ink);
+}
+.st-dot.is-warn {
+  background: var(--l-warn);
+}
+.st-dot.is-error {
+  background: var(--l-error);
+}
+.st-role {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.st-goal {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+.st-meta {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-family: var(--font-plex-mono), monospace;
+  color: var(--muted);
+}
+.st-empty {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 6px 0;
+}
+/* --- run timeline --- */
+.run-timeline {
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  padding: 10px 12px;
+}
+.rt-empty {
+  font-size: 11px;
+  color: var(--muted);
+}
+.rt-lane {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+.rt-name {
+  flex: 0 0 88px;
+  font-size: 11px;
+  font-family: var(--font-plex-mono), monospace;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rt-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 14px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+}
+.rt-track.is-sel {
+  border-color: var(--accent);
+}
+.rt-blk {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.rt-blk.done {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
+.rt-blk.run {
+  background: var(--accent);
+}
+.rt-blk.warn {
+  background: var(--l-warn);
+}
+.rt-blk.bad {
+  background: var(--l-error);
+}
+.rt-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hairline);
+  font-size: 10px;
+  font-family: var(--font-plex-mono), monospace;
+  color: var(--muted);
+}
+/* --- spawn detail --- */
+.sp-timing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-family: var(--font-plex-mono), monospace;
+  color: var(--muted);
+}
+.sp-dur {
+  margin-left: auto;
+  color: var(--ink);
+}
+.sp-goal {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.sp-result {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  background: var(--bg);
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 40vh;
+  overflow: auto;
+}
+.orch-pill.sp-running {
+  color: var(--accent);
+}
+.orch-pill.sp-done {
+  color: var(--ink);
+}
+.orch-pill.sp-timed_out,
+.orch-pill.sp-error {
+  color: var(--l-warn);
 }
 .orch-scrim {
   position: fixed;
@@ -4799,7 +5586,6 @@
 }
 .orch-sheet select:focus,
 .orch-sheet textarea:focus {
-  outline: none;
   border-color: var(--accent);
 }
 .orch-rng {
@@ -4867,353 +5653,561 @@
 }
 
 /* ── auth screens ───────────────────────────────────────── */
-.auth-shell {
-  position: relative;
-  min-height: 100vh;
+/* The sign-in surface is the product's one Persuade page. A 50/50 split: the
+   form is quiet, monochrome and typographic on the left; the right half commits
+   to a deep ink ground and lets the vault's REAL knowledge graph glow on it. The
+   Graph-Only Color Rule still holds — that panel IS the graph, so the six layer
+   hues belong there and nowhere else in the shell. Display words are set in the
+   serif register; the rest stays sans; data stays mono. */
+
+.authx {
+  /* locked to the viewport on desktop (not min-height): a tall form then scrolls
+     inside its own column instead of growing the grid, which would resize — and
+     re-measure — the right panel's canvas. dvh tracks mobile chrome. */
+  height: 100vh;
+  height: 100dvh;
   display: grid;
-  grid-template-rows: 56px 1fr;
-  overflow: hidden;
-  background: radial-gradient(
-      ellipse 52% 58% at 18% 92%,
-      color-mix(in srgb, var(--accent) 7%, transparent),
-      transparent 72%
-    ),
-    var(--bg);
+  grid-template-rows: 56px minmax(0, 1fr);
+  background: var(--bg);
+  color: var(--ink);
 }
-.auth-topbar {
-  position: relative;
-  z-index: 1;
+
+/* ── top bar ────────────────────────────────────────────── */
+.authx-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  background: var(--bg);
+  gap: 16px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--hairline);
 }
-.auth-brand {
+.authx-brand {
   display: flex;
   align-items: center;
   gap: 9px;
   text-decoration: none;
   color: var(--ink);
 }
-.auth-mark {
-  width: 20px;
-  height: 20px;
+.authx-mark {
+  width: 18px;
+  height: 18px;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 2px;
 }
-.auth-mark i {
+.authx-mark i {
   display: block;
   background: var(--accent);
 }
-.auth-mark i:nth-child(2) {
+.authx-mark i:nth-child(2) {
   opacity: 0.68;
 }
-.auth-mark i:nth-child(3) {
+.authx-mark i:nth-child(3) {
   opacity: 0.44;
 }
-.auth-mark i:nth-child(4) {
+.authx-mark i:nth-child(4) {
   opacity: 0.82;
 }
-.auth-meta {
+.authx-word {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.authx-bar-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font: 10px var(--font-plex-mono), monospace;
+  gap: 12px;
+}
+.authx-bar-label {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   color: var(--muted);
 }
-.auth-main {
-  position: relative;
-  z-index: 1;
-  width: min(100%, 1120px);
-  margin: auto;
+.authx-theme {
+  width: 32px;
+  height: 32px;
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(360px, 448px);
-  align-items: center;
-  gap: clamp(40px, 10vw, 150px);
-  padding: 32px 24px;
+  place-items: center;
+  color: var(--ink);
+  transition: color 0.15s var(--ease);
 }
-.auth-intro {
-  max-width: 510px;
-  min-height: 430px;
-}
-.auth-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 14px;
+.authx-theme:hover {
   color: var(--accent);
-  font: 10px var(--font-plex-mono), monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
 }
-.auth-signal {
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
+.authx-theme svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
-.auth-intro h1 {
-  max-width: 520px;
-  margin: 0;
-  font-size: clamp(34px, 4.8vw, 62px);
-  line-height: 1.02;
-  letter-spacing: -0.045em;
+
+/* ── the split ──────────────────────────────────────────── */
+.authx-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
 }
-.auth-intro > p:not(.auth-eyebrow) {
-  max-width: 430px;
-  margin: 22px 0 22px;
+
+.authx-form-col {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  padding: 48px 40px;
+  min-height: 0;
+  overflow-y: auto;
+  /* the keyword's width changes with its face; clip the horizontal axis so no
+     scrollbar can appear here — an appearing/disappearing bar changes the
+     viewport width, which would resize (and flash) the right panel's canvas */
+  overflow-x: clip;
+}
+.authx-form-inner {
+  width: min(100%, 420px);
+}
+
+/* display type: typed clause in serif/sans, one rotating keyword per line.
+   --h1 is the one true size; the line box is a fixed length derived from it, so
+   no face can change the line's height. Each keyed face is scaled by
+   OPTICAL_SIZE below to match the serif line's x-height (0.516em), so the word
+   reads at one size no matter which face is showing (a latent "sizing" bug: the
+   six faces' native x-heights run 0.328–0.516, so at equal font-size the word
+   looked ~1.5x smaller in the scripts). */
+.authx-h1 {
+  --h1: clamp(32px, 3.2vw, 44px);
+  --line: 1.16;
+  margin: 0 0 20px;
+  display: block;
+  font-size: var(--h1);
+  line-height: var(--line);
+}
+.authx-h1-line {
+  display: block;
+}
+.authx-h1-serif {
+  font-family: var(--font-plex-serif), Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.authx-h1-sans {
+  font-family: var(--font-plex-sans), system-ui, sans-serif;
+  font-weight: 400;
+  font-size: clamp(24px, 2.4vw, 32px);
+  letter-spacing: -0.03em;
   color: var(--muted);
-  font-size: 16px;
 }
-.auth-growth-bg {
+
+/* the displayed keyword: a fixed line box (calc of --h1, never of the swapped
+   face's own size), and a per-face optical scale so every face renders at the
+   serif line's x-height. Scripts need the most lift (Great Vibes x-height is
+   only 0.328em); the display serifs sit near 1. The widest word still fits the
+   420px column at these scales. */
+.authx-key {
+  position: relative;
+  /* block + fit-content, NOT inline-block: an inline-block's vertical position
+     depends on its own baseline, which differs per face and bobs the word. A
+     shrink-to-fit block sits at a fixed top, and the mark still hugs the word. */
+  display: block;
+  width: fit-content;
+  white-space: pre;
+  letter-spacing: 0;
+  font-size: var(--h1);
+  line-height: calc(var(--h1) * var(--line));
+  color: var(--ink);
+  /* the faces differ in width AND baseline, so the word would jitter as it
+     swaps. --sx normalizes every face to one rendered width and --y locks them
+     to one baseline (both measured in-browser). Transforms never reflow, so the
+     box stays put — the jitter is removed without moving anything else. */
+  transform: translateY(var(--y, 0)) scaleX(var(--sx, 1));
+  transform-origin: left center;
+}
+/* x-height normalization (font-size) + width normalization (--sx) + baseline
+   lock (--y), all measured in-browser via canvas TextMetrics. The faces' native
+   x-heights run 0.328–0.516 and their widths 221–287px, so unequal scaling left
+   the word bobbing and stretching; these three corrections align it. */
+.authx-key[data-face="vibes"] {
+  font-family: var(--font-vibes), cursive;
+  font-size: calc(var(--h1) * 1.51);
+  --sx: 1.115;
+  --y: 4px;
+}
+.authx-key[data-face="pinyon"] {
+  font-family: var(--font-pinyon), cursive;
+  font-size: calc(var(--h1) * 1.59);
+  --sx: 0.867;
+  --y: 2px;
+}
+.authx-key[data-face="cormorant"] {
+  font-family: var(--font-cormorant), Georgia, serif;
+  font-style: italic;
+  font-size: calc(var(--h1) * 1.34);
+  --sx: 1.019;
+  --y: 0;
+}
+.authx-key[data-face="garamond"] {
+  font-family: var(--font-garamond), Georgia, serif;
+  font-style: italic;
+  font-size: calc(var(--h1) * 1.29);
+  --sx: 1.0;
+  --y: -1px;
+}
+.authx-key[data-face="bodoni"] {
+  font-family: var(--font-bodoni), Georgia, serif;
+  font-style: italic;
+  font-size: calc(var(--h1) * 1.17);
+  --sx: 0.927;
+  --y: 0;
+}
+.authx-key[data-face="playfair"] {
+  font-family: var(--font-playfair), Georgia, serif;
+  font-style: italic;
+  font-size: calc(var(--h1) * 1);
+  --sx: 1.118;
+  --y: 0;
+}
+/* the mark: a blue highlighter that slides in ONCE behind the word, late
+   (a random 3–10s after load — see KeyWord), then stays. The word itself is
+   never recoloured — only the mark is blue. */
+.axw-mark {
   position: absolute;
   z-index: 0;
+  left: -1%;
+  right: -1%;
+  top: 8%;
+  bottom: 8%;
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+.axw-mark.is-marked {
+  animation: axw-sweep 0.9s var(--ease) 1 forwards;
+}
+.axw-text {
+  position: relative;
+  z-index: 1;
+}
+.authx-lede {
+  margin: 0 0 26px;
+  max-width: 42ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* signup only — the three-step readout */
+.authx-steps {
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--hairline);
+}
+.authx-step {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.authx-step-n {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 11px;
+  color: var(--accent);
+}
+.authx-step-body strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.authx-step-body span {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.authx-foot {
+  margin: 26px 0 0;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* ── right column: the knowledge graph ──────────────────── */
+/* Theme-aware twice over: the sky is deep ink at night, a chart plotted on
+   paper by day. Layer hues are NOT overridden — the panel inherits the theme's
+   own --l-* ramp (bright values on ink, deep values on paper), so the six
+   neighbourhoods stay legible on either ground. */
+.authx-visual-col {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--axg-ground);
+  color: var(--axg-ink);
+  /* light (default): a star chart on paper */
+  --axg-ground: oklch(0.952 0.008 255);
+  --axg-ink: oklch(0.235 0.02 262);
+  --axg-muted: oklch(0.5 0.022 258);
+  --axg-rule: color-mix(in srgb, var(--axg-ink) 15%, transparent);
+}
+[data-theme="dark"] .authx-visual-col {
+  --axg-ground: oklch(0.135 0.014 262);
+  --axg-ink: oklch(0.93 0.008 258);
+  --axg-muted: oklch(0.6 0.02 258);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .authx-visual-col {
+    --axg-ground: oklch(0.135 0.014 262);
+    --axg-ink: oklch(0.93 0.008 258);
+    --axg-muted: oklch(0.6 0.02 258);
+  }
+}
+
+.authx-graph {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+}
+.authx-starfield {
+  position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  color: var(--accent);
+  display: block;
+}
+/* edge vignette: sinks the field's corners into its ground so the sky reads as
+   deep space (or a sheet's edge) rather than a rectangle, and keeps the readout
+   legible on either theme */
+.authx-sky-shade {
+  position: absolute;
+  inset: 0;
   pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 44%, transparent 52%, color-mix(in srgb, var(--axg-ground) 74%, transparent) 100%),
+    linear-gradient(to top, color-mix(in srgb, var(--axg-ground) 58%, transparent), transparent 26%);
 }
-.auth-growth-bg path {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
+
+/* honest readouts at the foot of the panel */
+.authx-readout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--axg-rule);
+  background: linear-gradient(to top, color-mix(in srgb, var(--axg-ground) 92%, transparent), transparent);
+  font-family: var(--font-plex-mono), monospace;
 }
-.auth-growth-bg .ag-haze {
-  stroke-width: 16;
-  opacity: 0.035;
-  filter: url(#auth-trail-blur);
-}
-.auth-growth-bg .ag-trail {
-  stroke-width: 4;
-  opacity: 0.06;
-  filter: url(#auth-trail-soften);
-}
-.auth-growth-bg .ag-core {
-  stroke-width: 1.15;
-  opacity: 0.38;
-}
-.auth-growth-bg .ag-node-diffusion {
-  fill: currentColor;
-  opacity: 0.09;
-  filter: url(#auth-trail-blur);
-}
-.auth-growth-bg .ag-node-halo {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1;
-  opacity: 0.07;
-  stroke-dasharray: 2 11;
-}
-.auth-growth-bg .ag-node-core {
-  fill: currentColor;
-  opacity: 0.36;
-}
-[data-theme="dark"] .auth-growth-bg .ag-haze {
-  opacity: 0.055;
-}
-[data-theme="dark"] .auth-growth-bg .ag-trail {
-  opacity: 0.09;
-}
-[data-theme="dark"] .auth-growth-bg .ag-core {
-  opacity: 0.5;
-}
-[data-theme="dark"] .auth-growth-bg .ag-node-diffusion {
-  opacity: 0.13;
-}
-[data-theme="dark"] .auth-growth-bg .ag-node-halo {
-  opacity: 0.1;
-}
-[data-theme="dark"] .auth-growth-bg .ag-node-core {
-  opacity: 0.48;
-}
-.auth-status,
-.auth-steps {
-  max-width: 440px;
-  border: 1px solid var(--hairline);
-  background: var(--surface);
-}
-.auth-status {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-}
-.auth-status div {
-  min-width: 0;
-  padding: 10px 12px;
-  border-right: 1px solid var(--hairline);
-}
-.auth-status div:last-child {
-  border: 0;
-}
-.auth-status span {
-  display: block;
-  color: var(--muted);
-  font: 9px var(--font-plex-mono), monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.auth-status strong {
-  display: block;
-  margin-top: 3px;
-  font-size: 14px;
-  font-weight: 600;
-}
-.auth-step {
-  display: grid;
-  grid-template-columns: 36px 1fr;
-  gap: 10px;
-  padding: 11px 12px;
-  border-bottom: 1px solid var(--hairline);
-}
-.auth-step:last-child {
-  border: 0;
-}
-.auth-step-n {
-  color: var(--accent);
-  font: 11px var(--font-plex-mono), monospace;
-}
-.auth-step strong {
-  display: block;
-  font-size: 12px;
-}
-.auth-step span:last-child {
-  display: block;
-  margin-top: 1px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.auth-card {
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  box-shadow: 8px 8px 0 color-mix(in srgb, var(--ink) 8%, transparent);
-}
-.auth-card-head {
-  padding: 18px 20px 16px;
-  border-bottom: 1px solid var(--hairline);
-}
-.auth-card-head h2 {
-  margin: 0;
-  font-size: 19px;
-}
-.auth-card-head p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-.auth-fields {
-  padding: 20px;
-}
-.auth-field {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 14px;
-}
-.auth-field label {
-  font: 10px var(--font-plex-mono), monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-.auth-field input {
-  width: 100%;
-  height: 42px;
-  padding: 0 11px;
-  color: var(--ink);
-  background: var(--bg);
-  border: 1px solid var(--hairline);
-}
-.auth-field input:hover {
-  border-color: var(--muted);
-}
-.auth-field input:focus {
-  border-color: var(--accent);
-  outline: 0;
-}
-.auth-row {
+.authx-readout-row {
   display: flex;
-  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  line-height: 1.7;
+}
+.authx-rk {
+  flex: 0 0 46px;
+  color: var(--axg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.authx-rv {
+  color: var(--axg-ink);
+}
+.authx-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--axg-rule);
+}
+.authx-leg {
+  display: inline-flex;
   align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--axg-muted);
+}
+.authx-leg-dot {
+  width: 7px;
+  height: 7px;
+}
+.authx-leg-n {
+  color: color-mix(in srgb, var(--axg-muted) 78%, transparent);
+}
+
+/* ── the form ───────────────────────────────────────────── */
+.authf {
+  display: block;
+}
+.authf-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 12px;
-  margin: -2px 0 20px;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+.authf-head-label {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+}
+.authf-head-alt {
   font-size: 12px;
   color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
-.auth-check {
+.authf-head-alt:hover {
+  color: var(--ink);
+}
+.authf-error {
+  margin: 0 0 16px;
+  padding: 9px 11px;
+  border: 1px solid var(--l-error);
+  color: var(--l-error);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.authf-field {
+  display: block;
+  margin-bottom: 18px;
+}
+.authf-label {
+  display: block;
+  margin-bottom: 6px;
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.authf-input {
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-plex-sans), system-ui, sans-serif;
+  font-size: 15px;
+  transition: border-color 0.15s var(--ease);
+}
+.authf-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+.authf-input:hover {
+  border-bottom-color: var(--muted);
+}
+.authf-input:focus {
+  border-bottom-color: var(--accent);
+}
+.authf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 6px 0 22px;
+}
+.authf-check {
   display: flex;
   align-items: center;
   gap: 7px;
+  font-size: 12px;
   color: var(--muted);
-  font-size: 11px;
   cursor: pointer;
 }
-.auth-check input {
+.authf-check input {
   width: 14px;
   height: 14px;
   accent-color: var(--accent);
 }
-.auth-check-terms {
+.authf-check-terms {
   align-items: flex-start;
-  margin: 2px 0 20px;
+  margin: 0 0 20px;
+  line-height: 1.5;
 }
-.auth-link {
-  color: var(--accent);
+.authf-link {
+  color: var(--muted);
+  text-decoration: underline;
   text-underline-offset: 3px;
 }
-.auth-submit {
+.authf-link:hover {
+  color: var(--ink);
+}
+.authf-submit {
   width: 100%;
-  height: 44px;
+  height: 46px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 13px;
+  gap: 10px;
+  padding: 0 16px;
   color: var(--accent-fg);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+.authf-submit:hover:not(:disabled) {
   background: var(--accent);
-  border: 1px solid var(--accent);
-  font-weight: 600;
+  border-color: var(--accent);
+  color: var(--accent-fg);
 }
-.auth-submit:hover {
-  filter: brightness(0.92);
+.authf-submit:disabled {
+  opacity: 0.55;
 }
-.auth-submit span:last-child {
-  font: 18px/1 var(--font-plex-mono), monospace;
+.authf-submit-arrow {
+  display: grid;
+  place-items: center;
 }
-.auth-card-foot {
-  padding: 15px 20px;
-  border-top: 1px solid var(--hairline);
-  color: var(--muted);
-  font-size: 12px;
+.authf-submit svg {
+  display: block;
 }
-.auth-card-foot button {
-  color: var(--ink);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+
+/* ── motion ─────────────────────────────────────────────── */
+/* The starfield animates on canvas; prefers-reduced-motion renders one settled
+   frame (handled in AuthGraph). The keyframes here belong to the auth heading's
+   hand-annotated keyword and the readout's arrival, not the sky. */
+@keyframes axg-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-.auth-footnote {
-  max-width: 440px;
-  margin: 14px 0 0 auto;
-  color: var(--muted);
-  font: 10px/1.5 var(--font-plex-mono), monospace;
-  text-align: right;
+.authx-readout {
+  animation: axg-fade-in 0.8s var(--ease) both;
 }
-.auth-error {
-  margin-bottom: 14px;
-  padding: 8px 10px;
-  border: 1px solid var(--l-error);
-  color: var(--l-error);
-  font-size: 11px;
-  line-height: 1.5;
+
+/* the mark sweeps in behind the word once, then STAYS — the blue emphasis is
+   made once and held; the word's own colour never changes */
+@keyframes axw-sweep {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 0.24;
+  }
 }
-.auth-retry {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  font-weight: 600;
+@media (prefers-reduced-motion: reduce) {
+  .axw-mark {
+    animation: none;
+    transform: scaleX(1);
+    opacity: 0.24;
+  }
 }
 
 /* ── responsive ─────────────────────────────────────────── */
@@ -5223,6 +6217,29 @@
   }
 }
 @media (max-width: 900px) {
+  /* auth: stack the split — form first (the task), graph panel beneath it.
+     Unlock the fixed viewport height so the stacked column can scroll with the
+     document instead of being clipped. */
+  .authx {
+    height: auto;
+    min-height: 100dvh;
+    grid-template-rows: 56px auto;
+  }
+  .authx-split {
+    grid-template-columns: 1fr;
+  }
+  .authx-form-col {
+    padding: 40px 24px 28px;
+    align-content: start;
+    overflow-y: visible;
+  }
+  .authx-visual-col {
+    min-height: 300px;
+  }
+  .authx-readout {
+    position: static;
+    background: none;
+  }
   .swarm-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -5326,33 +6343,23 @@
   }
 }
 @media (max-width: 760px) {
-  .auth-meta span {
+  .authx-bar-label {
     display: none;
   }
-  .auth-main {
-    grid-template-columns: 1fr;
-    gap: 38px;
-    padding: 42px 20px;
+  .authx-bar {
+    padding: 0 16px;
   }
-  .auth-shell {
-    overflow: auto;
+  /* one knob: shrink --h1 so the serif line and every keyed face (which scale
+     from it) stay in step. Overriding .authx-key here would lose to the
+     higher-specificity [data-face] rules. */
+  .authx-h1 {
+    --h1: clamp(30px, 8vw, 40px);
   }
-  .auth-intro {
-    min-height: 390px;
+  .authx-h1-sans {
+    font-size: clamp(23px, 6vw, 30px);
   }
-  .auth-card {
-    width: 100%;
-  }
-  .auth-footnote {
-    margin-left: auto;
-  }
-  .auth-status,
-  .auth-steps {
-    max-width: none;
-  }
-  .auth-growth-bg {
-    width: 150%;
-    transform: translateX(-22%);
+  .authx-visual-col {
+    min-height: 240px;
   }
 }
 @media (max-width: 640px) {
@@ -5385,6 +6392,35 @@
   .cfg-reset,
   .reg-btn {
     padding: 10px 12px;
+  }
+  /* touch: bring the remaining small controls up to a 44px minimum target */
+  .icon-btn,
+  .user-btn,
+  .fa-btn,
+  .swarm-filter,
+  .seg-btn,
+  .chip,
+  .rt-fchip,
+  .act-mode,
+  .activity-filter,
+  .setting-action {
+    min-height: 44px;
+  }
+  .icon-btn,
+  .user-btn {
+    width: 44px;
+    height: 44px;
+  }
+  /* stack the registry forms so the four- and three-column grids become one */
+  .reg-form,
+  .reg-form-skill {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .reg-form-skill .reg-textarea {
+    grid-column: 1;
+  }
+  .reg-form .reg-add {
+    justify-content: center;
   }
   /* stack the agent form to one column so fields keep full width */
   .af-grid {

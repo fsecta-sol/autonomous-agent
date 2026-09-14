@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 export interface OperatorProfile {
@@ -133,11 +133,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(next);
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ authed, loading, profile, refresh, signIn, signUp, signOut, saveProfile }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo<AuthValue>(
+    () => ({ authed, loading, profile, refresh, signIn, signUp, signOut, saveProfile }),
+    [authed, loading, profile, refresh, signIn, signUp, signOut, saveProfile],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthValue {

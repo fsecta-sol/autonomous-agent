@@ -34,62 +34,61 @@ export function LoginForm() {
   }
 
   return (
-    <form className="auth-panel" onSubmit={onSubmit} noValidate>
-      <div className="auth-card">
-        <div className="auth-card-head">
-          <h2>Welcome back</h2>
-          <p>Log in to open your command workspace.</p>
-        </div>
-        <div className="auth-fields">
-          {error ? (
-            <p className="auth-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="auth-field">
-            <label htmlFor="login-email">Work email</label>
-            <input
-              id="login-email"
-              type="email"
-              autoComplete="email"
-              placeholder="operator@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="auth-field">
-            <label htmlFor="login-password">Password</label>
-            <input
-              id="login-password"
-              type="password"
-              autoComplete="current-password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <div className="auth-row">
-            <label className="auth-check">
-              <input type="checkbox" defaultChecked /> Keep me signed in
-            </label>
-            <a className="auth-link" href="#">
-              Forgot password?
-            </a>
-          </div>
-          <button className="auth-submit" type="submit" disabled={submitting}>
-            {submitting ? "Opening workspace…" : "Login"}
-            <span aria-hidden="true">{submitting ? "·" : <IconArrowRight style={{ width: 18, height: 18 }} />}</span>
-          </button>
-        </div>
-        <div className="auth-card-foot">
-          New to the workspace?{" "}
-          <Link href="/sign-up" style={{ color: "var(--ink)", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3 }}>
-            Create an operator account
-          </Link>
-        </div>
+    <form className="authf" onSubmit={onSubmit} noValidate>
+      <div className="authf-head">
+        <span className="authf-head-label">Sign in</span>
+        <Link className="authf-head-alt" href="/sign-up">
+          Need an account?
+        </Link>
       </div>
+
+      {error ? (
+        <p className="authf-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <label className="authf-field">
+        <span className="authf-label">Work email</span>
+        <input
+          className="authf-input"
+          type="email"
+          autoComplete="email"
+          placeholder="operator@company.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+      </label>
+
+      <label className="authf-field">
+        <span className="authf-label">Password</span>
+        <input
+          className="authf-input"
+          type="password"
+          autoComplete="current-password"
+          placeholder="Enter your password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+      </label>
+
+      <div className="authf-row">
+        <label className="authf-check">
+          <input type="checkbox" defaultChecked /> Keep me signed in
+        </label>
+        <a className="authf-link" href="#">
+          Forgot password?
+        </a>
+      </div>
+
+      <button className="authf-submit" type="submit" disabled={submitting}>
+        {submitting ? "Opening workspace…" : "Open workspace"}
+        <span aria-hidden="true" className="authf-submit-arrow">
+          {submitting ? "·" : <IconArrowRight style={{ width: 18, height: 18 }} />}
+        </span>
+      </button>
     </form>
   );
 }

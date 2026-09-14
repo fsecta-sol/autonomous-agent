@@ -112,7 +112,7 @@ export function AgentConfigPane({ agentId }: { agentId: string }) {
 
   if (loading) {
     return (
-      <div className="chat-pane active" role="tabpanel">
+      <div className="chat-pane active" role="tabpanel" id="panel-config" aria-labelledby="tab-config">
         <div className="activity-empty">Loading configuration…</div>
       </div>
     );
@@ -129,7 +129,7 @@ export function AgentConfigPane({ agentId }: { agentId: string }) {
   };
 
   return (
-    <div className="chat-pane active" role="tabpanel" data-od-id="agent-config">
+    <div className="chat-pane active" role="tabpanel" id="panel-config" aria-labelledby="tab-config" data-od-id="agent-config">
       <div className="cfg-pane">
         <div className="cfg-sec">
           <div className="cfg-head">
@@ -146,8 +146,9 @@ export function AgentConfigPane({ agentId }: { agentId: string }) {
               <button
                 type="button"
                 key={mode}
+                role="radio"
+                aria-checked={terminalMode === mode}
                 className={`cfg-mode ${terminalMode === mode ? "is-on" : ""} ${mode === "unsandboxed" ? "is-danger" : ""}`}
-                aria-pressed={terminalMode === mode}
                 disabled={mode === "unsandboxed" && !allowUnsandboxed}
                 title={mode === "unsandboxed" && !allowUnsandboxed ? "Disabled: server does not permit unsandboxed execution" : hint}
                 onClick={() => changingTerminal(mode)}

@@ -74,6 +74,15 @@ export const TOOL_CATALOG: ToolInfo[] = [
     enabledByDefault: true,
   },
   {
+    name: "spawn_subagent",
+    description:
+      "Delegate a focused piece of work to a sub-agent and get its result back. Use it to " +
+      "decompose or parallelize a task (e.g. one sub-agent gathers sources, another checks a " +
+      "specific relationship). Off by default; enable it on the agent you want to act as an " +
+      "orchestrator.",
+    enabledByDefault: false,
+  },
+  {
     name: "run_command",
     description:
       "Run a shell command and return its output. Whether this executes sandboxed or with full access is fixed by the operator's configuration for this agent.",

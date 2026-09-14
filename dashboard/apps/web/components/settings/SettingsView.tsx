@@ -214,9 +214,9 @@ function McpRegistry() {
         )}
       </div>
       <div className="reg-form">
-        <input className="reg-input" placeholder="name" value={name} spellCheck={false} onChange={(e) => setName(e.target.value)} />
-        <input className="reg-input" placeholder="https://mcp.example.com/mcp" value={url} spellCheck={false} autoComplete="off" onChange={(e) => setUrl(e.target.value)} />
-        <input className="reg-input" type="password" placeholder="bearer token (optional)" value={apiKey} spellCheck={false} autoComplete="off" onChange={(e) => setApiKey(e.target.value)} />
+        <input className="reg-input" aria-label="MCP server name" placeholder="name" value={name} spellCheck={false} onChange={(e) => setName(e.target.value)} />
+        <input className="reg-input" aria-label="MCP server URL" placeholder="https://mcp.example.com/mcp" value={url} spellCheck={false} autoComplete="off" onChange={(e) => setUrl(e.target.value)} />
+        <input className="reg-input" type="password" aria-label="Bearer token (optional)" placeholder="bearer token (optional)" value={apiKey} spellCheck={false} autoComplete="off" onChange={(e) => setApiKey(e.target.value)} />
         <button className="reg-add" type="button" onClick={() => void onAdd()} disabled={busy || !name.trim() || !url.trim()}>
           <IconPlus />
           Add server
@@ -299,10 +299,11 @@ function SkillRegistry() {
         )}
       </div>
       <div className="reg-form reg-form-skill">
-        <input className="reg-input" placeholder="name" value={name} spellCheck={false} onChange={(e) => setName(e.target.value)} />
-        <input className="reg-input" placeholder="description" value={description} spellCheck={false} onChange={(e) => setDescription(e.target.value)} />
+        <input className="reg-input" aria-label="Skill name" placeholder="name" value={name} spellCheck={false} onChange={(e) => setName(e.target.value)} />
+        <input className="reg-input" aria-label="Skill description" placeholder="description" value={description} spellCheck={false} onChange={(e) => setDescription(e.target.value)} />
         <textarea
           className="reg-textarea"
+          aria-label="Skill instructions (markdown)"
           placeholder="skill instructions (markdown)"
           rows={3}
           value={content}

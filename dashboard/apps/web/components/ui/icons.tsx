@@ -347,3 +347,91 @@ export function IconAppearance(props: IconProps) {
     </svg>
   );
 }
+
+/* --- execution-timeline activity glyphs (16px grid, 1.3 stroke) --- */
+
+export function IconThink(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M8 2.5c-2.7 0-4.5 1.8-4.5 4.2 0 1.4.7 2.5 1.7 3.2v2.1h5.6v-2.1c1-.7 1.7-1.8 1.7-3.2 0-2.4-1.8-4.2-4.5-4.2z" />
+      <path d="M6.3 13.6h3.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconGlobe(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M2.5 8h11M8 2.5c1.6 1.6 2.4 3.5 2.4 5.5S9.6 12.9 8 13.5C6.4 12.9 5.6 11 5.6 8S6.4 4.1 8 2.5z" />
+    </svg>
+  );
+}
+
+export function IconDoc(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 2.5h5l3 3v8H4z" />
+      <path d="M9 2.5v3h3" />
+      <path d="M6 8.5h4M6 11h3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconTable(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2.5" y="3" width="11" height="10" />
+      <path d="M2.5 6.3h11M2.5 9.6h11M6 3v10" />
+    </svg>
+  );
+}
+
+export function IconPlan(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 4h8M4 8h8M4 12h5" strokeLinecap="round" />
+      <circle cx="2.4" cy="4" r=".7" />
+      <circle cx="2.4" cy="8" r=".7" />
+      <circle cx="2.4" cy="12" r=".7" />
+    </svg>
+  );
+}
+
+export function IconCode(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 4.5 2.8 8 6 11.5M10 4.5 13.2 8 10 11.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconShield(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M8 2.2 13 4v3.6c0 3-2.1 5-5 6.2-2.9-1.2-5-3.2-5-6.2V4z" />
+      <path d="M6 7.9 7.4 9.3 10.2 6.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconBranch(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="3.6" cy="4" r="1.4" />
+      <circle cx="3.6" cy="12" r="1.4" />
+      <circle cx="12.4" cy="8" r="1.4" />
+      <path d="M5 4.4c3 .4 4 1.2 5.5 3M5 11.6c3-.4 4-1.2 5.5-3" />
+    </svg>
+  );
+}
+
+export function IconOutput(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="2.5" width="10" height="11" />
+      <path d="M5.5 8.5h5M5.5 11h3" strokeLinecap="round" />
+      <path d="M5.5 5.5h2" strokeLinecap="round" />
+    </svg>
+  );
+}

@@ -169,16 +169,45 @@ are both "active," neither is.
 **The Graph-Only Color Rule.** Layer hues live inside the knowledge graph and
 nowhere else. Chrome stays neutral so the graph's color is legible as information.
 
+**The Auth Panel Rule.** The sign-in page's right half is a night sky: the
+vault's real knowledge graph — the same deterministic build the workspace renders
+— read as an observatory rather than a diagram. Its 246 notes are stars (layer
+sets the colour, degree the size), the field breathes on its own epicycles while
+the disc turns almost imperceptibly, the graph-walker now and then walks a light
+path of two or three links, a comet crosses, and a new star kindles as a note is
+added. It is theme-aware twice over: deep ink at night, a star chart on paper by
+day. It does **not** override the layer hues — it inherits the theme's own `--l-*`
+ramp, so the six neighbourhoods read bright on ink and deep on paper. Its own
+ground/ink pair (`--axg-ground` / `--axg-ink` / `--axg-muted` / `--axg-rule`) and
+the additive-vs-source-over blend both switch with the theme. This is the one
+place the shell leaves the neutral ladder — the graph is the product, and here it
+is the product's front door; the left half and every other surface stay neutral.
+
 ## Typography
 
 **Display Font:** IBM Plex Sans (fallback: system-ui, sans-serif)
 **Body Font:** IBM Plex Sans (fallback: system-ui, sans-serif)
 **Label/Mono Font:** IBM Plex Mono (fallback: monospace)
+**Serif Font:** IBM Plex Serif (fallback: Georgia, serif) — the auth screens'
+display register only.
 
-**Character:** One superfamily, two registers. Plex Sans carries prose, values
-and headings; Plex Mono carries labels, counts, code and anything that should
-read as "measurement". The pairing is technical without being costumed — mono is
-used for data and labels, never as a decorative "tech" texture.
+**Character:** One superfamily, two registers — Sans carries prose, values and
+headings; Mono carries labels, counts, code and anything that should read as
+"measurement". The pairing is technical without being costumed — mono is used for
+data and labels, never as a decorative "tech" texture. A display register appears
+on exactly one surface, the auth screens: the serif sibling sets the typed,
+evocative clause (Plex Serif 400), and a single keyword per heading is set in an
+**elegant rotating display face**. That keyword cycles through six faces on an
+accelerating cadence (820ms easing each step by 0.7 down to a 120ms floor) — the
+scripts Great Vibes and Pinyon Script, and the italic display serifs Cormorant
+Garamond, Playfair Display, EB Garamond and Bodoni Moda. The faces differ in
+x-height, width and baseline, so each is normalized on all three axes (all
+measured in-browser via canvas TextMetrics, not spec tables): `font-size` matches
+its x-height to the serif line, `scaleX(--sx)` matches its rendered width, and
+`translateY(--y)` locks its baseline — so the word does not flicker, stretch or
+bob as it swaps. Once, at a random 3–10s after load, a blue mark slides in behind
+the word and stays; the word itself is never recoloured. All auth-only; none
+touches dashboard prose.
 
 ### Hierarchy
 - **Display** (700, 24px, 1.25): reader document titles only.
@@ -192,8 +221,20 @@ used for data and labels, never as a decorative "tech" texture.
 **Scale in use** (the literal steps the CSS ships, 9px → 24px): `9` status stamps
 and micro-labels · `10` panel eyebrows and field labels · `11` dense body, values,
 mono data · `12` chat/reader body and code · `13` card titles · `14` default body
-· `15` panel/modal headlines · `16` large headlines · `24` reader display. New
-sizes should reuse these steps rather than inventing intermediate ones.
+· `15` panel/modal headlines · `16` large headlines · `24` reader display and
+metric numerals. New sizes should reuse these steps rather than inventing
+intermediate ones.
+
+**The one exception:** the auth screens are the product's single Persuade
+surface, so they carry a display voice the Operate shell may not. Two fluid
+steps exist there and nowhere else — the display step `--h1`
+(`clamp(32px, 3.2vw, 44px)`, tracking -0.02em) shared by the serif clause and the
+keyword, and the sans clause `clamp(24px, 2.4vw, 32px)` (tracking -0.03em). The
+keyword does **not** carry a size per face: every face renders at `--h1` scaled by
+an optical multiplier that normalizes its x-height to the serif line's
+(`calc(var(--h1) * 0.516 / face-xHeight)` — Great Vibes ×1.57 down to Playfair
+×1.00), so the word reads at one size through the whole rotation. Nothing in the
+dashboard may follow them past the 24px ceiling.
 
 ### Named Rules
 **The Measurement Rule.** Mono is for data, labels and code — durations, counts,

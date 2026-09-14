@@ -105,6 +105,14 @@
   --color-error: var(--l-error);
   --font-sans: var(--font-plex-sans), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), monospace;
+  --font-serif: var(--font-plex-serif), Georgia, "Times New Roman", serif;
+  /* the auth keywords' rotating display set — elegant scripts + display serifs */
+  --font-vibes: var(--font-vibes), cursive;
+  --font-pinyon: var(--font-pinyon), cursive;
+  --font-cormorant: var(--font-cormorant), Georgia, serif;
+  --font-playfair: var(--font-playfair), Georgia, serif;
+  --font-garamond: var(--font-garamond), Georgia, serif;
+  --font-bodoni: var(--font-bodoni), Georgia, serif;
 }
 
 *,

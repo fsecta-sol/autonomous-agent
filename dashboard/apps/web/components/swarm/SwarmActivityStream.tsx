@@ -37,6 +37,9 @@ export function SwarmActivityStream({ variant = "rail" }: SwarmActivityStreamPro
     >
       <div className="fa-head">
         <h3>Swarm activity</h3>
+        <span className="grp-tag" title="This stream is synthesized locally until the agent runtime feed is wired">
+          sample
+        </span>
         <span className={`fa-live ${feedLive ? "" : "paused"}`}>
           <span className="fa-live-dot" />
           {feedLive ? "Live" : "Paused"}
@@ -69,31 +72,29 @@ function ActivityRow({
   onDismiss: () => void;
 }) {
   const ag = AGENT_SLUG[item.agent] ?? item.agent.toLowerCase();
+  // The row opens the touched concept in the graph. It carries the pointer
+  // affordance but stays a passive list item: the open action is a real button
+  // so keyboard and AT users reach it, and the row's own click is a convenience
+  // shortcut rather than the only path.
   return (
-    <div className="fa-item" role="listitem" onClick={onOpen}>
+    <div className="fa-item" role="listitem">
       <span className="fa-dot" data-ag={ag} aria-hidden="true" />
-      <div className="fa-body">
+      <button
+        className="fa-body"
+        type="button"
+        aria-label={`Open ${item.node || "concept"} in the graph`}
+        disabled={!item.node}
+        onClick={onOpen}
+      >
         <span className="fa-text">{renderText(item.text)}</span>
-      </div>
+      </button>
       <span className="fa-time">{item.time}</span>
       <span className="fa-actions">
         <button
-          className="fa-btn fa-ok"
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDismiss();
-          }}
-        >
-          Approve
-        </button>
-        <button
           className="fa-btn fa-x"
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDismiss();
-          }}
+          aria-label="Dismiss this activity"
+          onClick={onDismiss}
         >
           Dismiss
         </button>
