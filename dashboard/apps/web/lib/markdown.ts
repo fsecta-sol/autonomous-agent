@@ -43,6 +43,9 @@ export function renderMarkdown(src: string, opts: MarkdownOptions = {}): string 
     s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
     s = s.replace(/\[\[(.+?)\]\]/g, (_full, label: string) => wiki(label));
     s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    // italic runs after bold so `**x**` is already consumed; the content must
+    // be space-tight (`*x*` not `5 * 3`) so a stray asterisk can't italicize
+    s = s.replace(/\*([^\s*](?:[^*]*[^\s*])?)\*/g, "<em>$1</em>");
     return s;
   };
   // allow a small allowlist of hand-authored analysis components inside markdown
