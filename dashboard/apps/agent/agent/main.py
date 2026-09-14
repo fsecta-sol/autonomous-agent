@@ -1,23 +1,44 @@
 """FastAPI entrypoint for the agent service.
 
 `POST /run` takes the config payload the backend resolved and streams back our
-SSE envelope protocol (identical to the old Node chat-engine). `GET /health`
-is a readiness probe.
+SSE envelope protocol (identical to the old Node chat-engine, plus an `interrupt`
+envelope when a run pauses for approval). `GET /state/{thread_id}` reports the
+pending interrupt for a session, so the UI can re-surface it after a reload.
+`GET /health` is a readiness probe.
 """
 
+import asyncio
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 
+from .checkpointer import close_checkpointer, get_checkpointer, init_checkpointer
 from .config import agent_port
 from .graph import stream_run
 from .models import RunRequest
-from .sse import frame
+from .spawn_log import list_spawns
+from .spawns import extract_spawns
+from .sse import frame, keepalive
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-app = FastAPI(title="dashboard-agent", version="0.1.0")
+log = logging.getLogger("agent.main")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Open the checkpoint store for the life of the process."""
+    await init_checkpointer()
+    try:
+        yield
+    finally:
+        await close_checkpointer()
+
+
+app = FastAPI(title="dashboard-agent", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -25,12 +46,52 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+# Emit an SSE comment frame when the run goes quiet for this long. A tool round
+# (especially a sub-agent, which makes its own model calls and fetches) can
+# leave the stream silent for minutes, and an idle stream gets dropped by an
+# intermediary's timeout on the way to the client. See sse.keepalive().
+KEEPALIVE_INTERVAL_S = 10.0
+
+
+async def _with_keepalive(source: AsyncIterator[dict], interval: float = KEEPALIVE_INTERVAL_S) -> AsyncIterator[bytes]:
+    """Yield SSE frames from `source`, emitting a keepalive whenever it is silent
+    for `interval` seconds.
+
+    The in-flight `__anext__` runs as a Task we hold open across ticks, so a
+    keepalive never cancels the pending LangGraph step (a bare `wait_for` would,
+    aborting the run mid-tool). The task is cancelled only when the client
+    disconnects or the response is torn down.
+    """
+    aiter = source.__aiter__()
+    pending: asyncio.Task | None = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.ensure_future(aiter.__anext__())
+            done, _ = await asyncio.wait({pending}, timeout=interval)
+            if not done:
+                yield keepalive()
+                continue
+            task = done.pop()
+            pending = None
+            try:
+                envelope = task.result()
+            except StopAsyncIteration:
+                break
+            yield frame(envelope)
+    finally:
+        if pending is not None and not pending.done():
+            pending.cancel()
+            with suppress(asyncio.CancelledError):
+                await pending
+
+
 @app.post("/run")
 async def run(req: RunRequest) -> StreamingResponse:
     async def body():
         try:
-            async for envelope in stream_run(req):
-                yield frame(envelope)
+            async for chunk in _with_keepalive(stream_run(req)):
+                yield chunk
         except Exception as err:  # noqa: BLE001 — never leak a raw traceback as the body
             yield frame({"type": "error", "message": str(err)})
             yield frame({"type": "done"})
@@ -40,6 +101,59 @@ async def run(req: RunRequest) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/state/{thread_id}")
+async def state(thread_id: str) -> dict:
+    """The pending approval interrupt for a thread, if the run is paused.
+
+    A paused run leaves its interrupt as a write to the `__interrupt__` channel
+    on the latest checkpoint, so we read it straight from the saver — no graph
+    needed. Used by the UI to re-surface an approval after a reload.
+    """
+    saver = get_checkpointer()
+    slot = await saver.aget_tuple({"configurable": {"thread_id": thread_id}})
+    if slot is None:
+        return {"paused": False, "interrupt": None}
+    for _task_id, channel, value in slot.pending_writes or []:
+        if channel != "__interrupt__":
+            continue
+        interrupts = value if isinstance(value, (list, tuple)) else [value]
+        if not interrupts:
+            continue
+        intr = interrupts[0]
+        payload = getattr(intr, "value", None)
+        payload = payload if isinstance(payload, dict) else {}
+        return {
+            "paused": True,
+            "interrupt": {
+                "id": getattr(intr, "id", None),
+                "tool": payload.get("tool"),
+                "args": payload.get("args", {}),
+                "message": payload.get("message", "Approval required."),
+            },
+        }
+    return {"paused": False, "interrupt": None}
+
+
+@app.get("/spawns/{thread_id}")
+async def spawns(thread_id: str) -> dict:
+    """The sub-agents this orchestrator thread has spawned, in order.
+
+    Timestamps come from the spawn log (the checkpoint records only *that* a
+    spawn happened). For threads predating the log, we fall back to reading the
+    spawns straight out of the checkpoint.
+    """
+    logged = await list_spawns(thread_id)
+    if logged:
+        return {"spawns": logged}
+
+    saver = get_checkpointer()
+    slot = await saver.aget_tuple({"configurable": {"thread_id": thread_id}})
+    if slot is None:
+        return {"spawns": []}
+    messages = slot.checkpoint.get("channel_values", {}).get("messages", [])
+    return {"spawns": extract_spawns(messages)}
 
 
 if __name__ == "__main__":

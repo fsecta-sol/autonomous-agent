@@ -23,6 +23,18 @@ def frame(obj: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n".encode()
 
 
+def keepalive() -> bytes:
+    """An SSE comment frame, emitted while the run is silent.
+
+    An idle SSE stream is dropped by intermediaries (the backend's upstream
+    `fetch` has an undici body timeout; the browser-facing path has a proxy
+    timeout), so a long tool round or sub-agent run — during which we emit no
+    envelope at all — would otherwise be cut. Clients read only `data:` lines,
+    so this frame is invisible to them.
+    """
+    return b": keepalive\n\n"
+
+
 def _text_from_content(content: Any) -> str:
     """Extract plain text from a message chunk's content, which may be a string
     or a list of content blocks (reasoning/tool-call blocks have no plaintext)."""
@@ -59,20 +71,18 @@ def _reasoning_from_chunk(chunk: Any) -> str:
     return ""
 
 
-async def run_envelopes(agent: Any, messages: list[Any], recursion_limit: int) -> AsyncIterator[dict[str, Any]]:
+async def run_envelopes(agent: Any, graph_input: Any, config: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
     """Drive the LangGraph agent and yield our envelope dicts.
 
     Text comes only from the `messages` stream mode; tool start/end come only
-    from `updates`, so nothing is double-emitted. Reasoning is best-effort.
+    from `updates`, so nothing is double-emitted. Reasoning is best-effort. A
+    pause for approval surfaces as an `interrupt` envelope, after which the
+    stream ends (the run is checkpointed; a later call resumes it).
     """
     # tool_call_id → tool name, so a ToolMessage can report which tool finished.
     call_names: dict[str, str] = {}
 
-    async for mode, data in agent.astream(
-        {"messages": messages},
-        stream_mode=["messages", "updates"],
-        config={"recursion_limit": recursion_limit},
-    ):
+    async for mode, data in agent.astream(graph_input, stream_mode=["messages", "updates"], config=config):
         if mode == "messages":
             chunk, _meta = data
             # Only the model's own output streams as text — the `messages` mode
@@ -88,7 +98,13 @@ async def run_envelopes(agent: Any, messages: list[Any], recursion_limit: int) -
                 yield {"type": "text", "text": text}
             continue
 
-        # mode == "updates": {node_name: {"messages": [BaseMessage, …]}}
+        # mode == "updates": {node_name: {"messages": [BaseMessage, …]}}, or
+        # {"__interrupt__": (Interrupt(value=…, id=…),)} when a node pauses.
+        if INTERRUPT_KEY in (data or {}):
+            for intr in data[INTERRUPT_KEY]:
+                yield _interrupt_envelope(intr)
+            continue
+
         for update in (data or {}).values():
             for msg in (update or {}).get("messages", []) or []:
                 tool_calls = getattr(msg, "tool_calls", None)
@@ -122,3 +138,20 @@ async def run_envelopes(agent: Any, messages: list[Any], recursion_limit: int) -
                         "result": result,
                         "error": is_error,
                     }
+
+
+INTERRUPT_KEY = "__interrupt__"
+
+
+def _interrupt_envelope(intr: Any) -> dict[str, Any]:
+    """Translate a LangGraph Interrupt into our `interrupt` envelope. The value
+    is whatever the tool passed to `interrupt()` (see tools/terminal.py)."""
+    value = getattr(intr, "value", None)
+    payload = value if isinstance(value, dict) else {"message": str(value)}
+    return {
+        "type": "interrupt",
+        "id": getattr(intr, "id", None),
+        "tool": payload.get("tool"),
+        "args": payload.get("args", {}),
+        "message": payload.get("message", "Approval required."),
+    }
