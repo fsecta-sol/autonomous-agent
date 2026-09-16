@@ -12,17 +12,21 @@ import uuid
 from collections.abc import AsyncIterator
 
 from langchain.agents import create_agent
+from langchain.agents.middleware import ModelRetryMiddleware, ToolRetryMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.types import Command
 
 from .checkpointer import get_checkpointer
+from .config import subagent_timeout_s
 from .llm import build_model
 from .mcp import load_mcp_tools
 from .models import RunRequest
 from .sse import run_envelopes
+from .store import get_store
 from .tools import build_tools
+from .tools.batch import make_batch_tool
 from .tools.spawn import SpawnBudget, make_spawn_tool
 
 log = logging.getLogger("agent.graph")
@@ -32,13 +36,46 @@ log = logging.getLogger("agent.graph")
 # govern and expose it as an env knob (pragmatic parity).
 DEFAULT_RECURSION_LIMIT = int(os.environ.get("AGENT_RECURSION_LIMIT", "25"))
 
-# The orchestrator's delegation tool. Present only when the run asks for it.
-SPAWN_TOOL = "spawn_subagent"
+# Retry knobs. A flaky OpenAI-compatible endpoint (or an RPC/MCP tool) is the
+# common failure; retrying a few times recovers most transient errors without
+# failing the whole run. Applied as agents-v1 middleware, not node policies.
+RETRY_MAX = int(os.environ.get("AGENT_RETRY_MAX", "2"))
 
-# Tools a sub-agent must NOT receive: `spawn_subagent` (no recursion) and
-# `run_command` (its approval interrupt needs an operator-facing thread, which a
-# headless sub-agent has no way to satisfy).
-SUBAGENT_EXCLUDED = {SPAWN_TOOL, "run_command"}
+# Result caching is OFF by default: the model node's cache key is a hash of its
+# input messages, so two different sessions whose first turns are identical
+# ("hi") would collide and the second would replay the first's cached answer.
+# Enable it only when the deployment accepts that (e.g. a single-agent, single-
+# user setup where identical inputs are genuinely a repeat).
+CACHE_ENABLED = os.environ.get("AGENT_CACHE") == "1"
+
+# The orchestrator's delegation tools. Present only when the run asks for them.
+SPAWN_TOOL = "spawn_subagent"
+BATCH_TOOL = "batch_research"
+
+# Tools a sub-agent must NOT receive: the delegation tools themselves (no
+# recursion) and `run_command` (its approval interrupt needs an operator-facing
+# thread, which a headless sub-agent has no way to satisfy).
+SUBAGENT_EXCLUDED = {SPAWN_TOOL, BATCH_TOOL, "run_command"}
+
+
+def _retry_middleware() -> list:
+    """Retry middleware for a run's model and tool calls. See RETRY_MAX."""
+    if RETRY_MAX <= 0:
+        return []
+    return [
+        ModelRetryMiddleware(max_retries=RETRY_MAX),
+        ToolRetryMiddleware(max_retries=RETRY_MAX),
+    ]
+
+
+def _cache():
+    """The graph's result cache, or None (off by default — see CACHE_ENABLED)."""
+    if not CACHE_ENABLED:
+        return None
+    from langgraph.cache.memory import InMemoryCache
+
+    return InMemoryCache()
+
 
 
 async def _collect_tools(req: RunRequest) -> tuple[list[BaseTool], list[str]]:
@@ -52,9 +89,12 @@ async def _collect_tools(req: RunRequest) -> tuple[list[BaseTool], list[str]]:
     all_tools = [*base, *mcp_tools]
 
     tools = list(all_tools)
-    if SPAWN_TOOL in req.tools:
+    if SPAWN_TOOL in req.tools or BATCH_TOOL in req.tools:
         subagent_tools = [t for t in all_tools if getattr(t, "name", "") not in SUBAGENT_EXCLUDED]
+    if SPAWN_TOOL in req.tools:
         tools.append(make_spawn_tool(req, subagent_tools, SpawnBudget()))
+    if BATCH_TOOL in req.tools:
+        tools.append(make_batch_tool(req, subagent_tools, subagent_timeout_s()))
     return tools, warnings
 
 
@@ -106,6 +146,9 @@ async def stream_run(req: RunRequest) -> AsyncIterator[dict]:
             tools=tools,
             system_prompt=req.system,
             checkpointer=get_checkpointer(),
+            store=get_store(),
+            middleware=_retry_middleware(),
+            cache=_cache(),
         )
         # A session is a durable thread; with no session id the run is ephemeral.
         thread_id = req.sessionId or f"ephemeral-{uuid.uuid4()}"

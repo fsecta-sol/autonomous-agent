@@ -6,6 +6,7 @@ from langchain_core.tools import BaseTool
 
 from .builtin import BUILTIN_TOOLS
 from .fetch_url import fetch_url
+from .memory import make_memory_tools
 from .remote import REMOTE_TOOLS
 from .terminal import make_run_command
 from .vault import vault_links, vault_list, vault_read, vault_search
@@ -20,15 +21,22 @@ STATIC_TOOLS: dict[str, BaseTool] = {
     "vault_links": vault_links,
 }
 
+MEMORY_TOOL_NAMES = {"memory_save", "memory_search", "memory_forget"}
+
 
 def build_tools(names: list[str], terminal_mode: str, allow_unsandboxed: bool, agent_id: str = "") -> list[BaseTool]:
     """Resolve the builtin tools for a run. `run_command` is added only when the
-    agent's terminal mode is not "off"."""
+    agent's terminal mode is not "off"; the memory tools are built per agent so
+    they scope to that agent's namespace."""
+    memory = make_memory_tools(agent_id) if MEMORY_TOOL_NAMES & set(names) else {}
     tools: list[BaseTool] = []
     for name in names:
         if name == "run_command":
             if terminal_mode != "off":
                 tools.append(make_run_command(terminal_mode, allow_unsandboxed, agent_id))
+            continue
+        if name in memory:
+            tools.append(memory[name])
             continue
         tool = STATIC_TOOLS.get(name)
         if tool is not None:

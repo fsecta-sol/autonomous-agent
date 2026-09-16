@@ -1,6 +1,6 @@
 import { LlmError } from "./llm-client";
-import { streamChatRequest, type StreamHandlers } from "./llm-stream";
-import type { Agent, ActivityDay, KnowledgeSource, PipelineRun } from "@dashboard/shared";
+import { streamChatRequest, streamAttachRequest, type StreamHandlers } from "./llm-stream";
+import type { Agent, ActivityDay, KnowledgeSource, PipelineRun, SpawnEvent, SwarmTelemetry } from "@dashboard/shared";
 import { ACTIVITY_DAYS, CRON } from "./store";
 import { buildGraphData, type GraphData } from "@dashboard/shared";
 
@@ -25,6 +25,16 @@ export async function fetchGraphData(): Promise<GraphData> {
 export async function fetchAgents(): Promise<Agent[]> {
   const data = await jsonOrThrow<{ agents: Agent[] }>(await fetch("/api/agents"));
   return data.agents;
+}
+
+/**
+ * The swarm's derived runtime telemetry (heartbeat, uptime, queue, error rate,
+ * throughput, latency). Every figure is measured by the backend, not mocked.
+ * Throws on failure so a poller can mark the feed offline.
+ */
+export async function fetchTelemetry(signal?: AbortSignal): Promise<SwarmTelemetry> {
+  const res = await fetch("/api/telemetry", { signal, cache: "no-store" });
+  return jsonOrThrow<SwarmTelemetry>(res);
 }
 
 export async function fetchActivityDays(): Promise<ActivityDay[]> {
@@ -107,6 +117,39 @@ export function saveConnection(conn: AgentConnection): void {
   localStorage.setItem("agent-conn", JSON.stringify({ model: conn.model }));
 }
 
+/** The models an endpoint serves, and the one it would default to. */
+export interface ModelsResponse {
+  models: string[];
+  /** the server's default model (env value, or the endpoint's auto-pick) */
+  default: string;
+  source: "env" | "auto" | "none";
+  /** when the list could not be read (e.g. the endpoint is unreachable) */
+  detail?: string;
+}
+
+/**
+ * List the models the endpoint serves. With `agentId` the backend resolves that
+ * agent's own endpoint + key first, so an agent on its own provider lists its
+ * models rather than the server's. Resolves to an empty list on failure (never
+ * throws) so a picker can fall back to a free-text field.
+ */
+export async function fetchModels(agentId?: string): Promise<ModelsResponse> {
+  const url = agentId ? `/api/models?agentId=${encodeURIComponent(agentId)}` : "/api/models";
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { models: [], default: "", source: "none" };
+    const data = (await res.json()) as Partial<ModelsResponse>;
+    return {
+      models: Array.isArray(data.models) ? data.models.filter((m): m is string => typeof m === "string") : [],
+      default: typeof data.default === "string" ? data.default : "",
+      source: data.source === "env" || data.source === "auto" ? data.source : "none",
+      detail: typeof data.detail === "string" ? data.detail : undefined,
+    };
+  } catch {
+    return { models: [], default: "", source: "none" };
+  }
+}
+
 export interface ChatTurn {
   role: "system" | "user" | "assistant";
   content: string;
@@ -138,7 +181,10 @@ export interface StreamChatRequest {
  * `status === 501` when the server has no key.
  */
 export async function streamAgentChat(req: StreamChatRequest, handlers: StreamHandlers): Promise<void> {
-  return streamChatRequest("/api/chat", { ...req, model: req.model || readConnection().model }, handlers);
+  // An explicit "" means "no override" (the server then uses the session's own
+  // choice, else its default) — only an absent value falls back to the global
+  // Settings model. `??` (not `||`) keeps that distinction.
+  return streamChatRequest("/api/chat", { ...req, model: req.model ?? readConnection().model }, handlers);
 }
 
 export interface ToolInfo {
@@ -373,6 +419,8 @@ export interface ChatSessionMessage {
   role: "system" | "user" | "assistant";
   content: string;
   links: string[] | null;
+  /** recorded SSE envelopes for this turn, so a reload can rebuild the trace */
+  events: unknown[] | null;
   seq: number;
   createdAt: number;
 }
@@ -428,6 +476,22 @@ export async function getChatState(id: string): Promise<ChatRunState> {
   return jsonOrThrow<ChatRunState>(await fetch(`/api/chats/${encodeURIComponent(id)}/state`));
 }
 
+/**
+ * Attach to a session's in-flight run. The backend replays the run from its
+ * start (so a reload re-renders the steps already taken) and then follows it
+ * live. If no run is active the stream ends immediately with `done`, and the
+ * caller falls back to the persisted transcript.
+ */
+export async function attachRun(sessionId: string, handlers: StreamHandlers): Promise<void> {
+  return streamAttachRequest(`/api/chats/${encodeURIComponent(sessionId)}/run`, handlers);
+}
+
+/** Ask the backend to cancel a session's active run (persists the partial turn). */
+export async function stopRun(sessionId: string): Promise<void> {
+  const res = await fetch(`/api/chats/${encodeURIComponent(sessionId)}/stop`, { method: "POST" });
+  if (!res.ok) throw new Error(`Request failed with HTTP ${res.status}`);
+}
+
 /** Every chat session across all agents, newest first (for the run list). */
 export async function listAllChats(): Promise<ChatSession[]> {
   const res = await fetch("/api/chats");
@@ -435,17 +499,8 @@ export async function listAllChats(): Promise<ChatSession[]> {
   return data.sessions;
 }
 
-/** One sub-agent spawn of an orchestrator session. */
-export interface SpawnEvent {
-  id: string | null;
-  role: string;
-  goal: string;
-  status: "running" | "done" | "timed_out" | "error";
-  /** epoch ms; absent for spawns read from an old checkpoint (no log entry) */
-  startedAt?: number;
-  finishedAt?: number | null;
-  result?: string | null;
-}
+/** One sub-agent spawn of an orchestrator session (shared with the trace model). */
+export type { SpawnEvent };
 
 /**
  * The sub-agents an orchestrator session has spawned, oldest first. Reads the
@@ -503,6 +558,64 @@ export async function updateChat(
 export async function deleteChat(id: string): Promise<void> {
   const res = await fetch(`/api/chats/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`Request failed with HTTP ${res.status}`);
+}
+
+/** Delete many sessions in one request. Throws on failure so the caller can roll
+ *  back optimistic removal; resolves with the ids actually removed. */
+export async function deleteChats(ids: string[]): Promise<string[]> {
+  if (!ids.length) return [];
+  const res = await fetch("/api/chats", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  const data = await jsonOrThrow<{ deleted: string[]; missing: string[] }>(res);
+  return data.deleted;
+}
+
+/**
+ * Rewind a session so it ends after `seq`, and clear the agent's checkpoint for
+ * it — the backend half of a regenerate or edit-and-resend. Pass `content` to
+ * rewrite the turn at `seq` (edit); omit it to keep the turn as it is
+ * (regenerate). Returns the rewound session.
+ */
+export async function rewindChat(id: string, seq: number, content?: string): Promise<ChatSessionDetail> {
+  const res = await fetch(`/api/chats/${encodeURIComponent(id)}/rewind`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(content === undefined ? { seq } : { seq, content }),
+  });
+  return jsonOrThrow<ChatSessionDetail>(res);
+}
+
+/** One saved checkpoint of a session's agent graph — a step the run took. */
+export interface CheckpointStep {
+  checkpointId: string;
+  step: number | null;
+  messageCount: number;
+  lastRole: string | null;
+  preview: string;
+}
+
+/** A session's saved agent checkpoints, newest first (the rewind picker's source). */
+export async function fetchHistory(id: string, limit = 50): Promise<CheckpointStep[]> {
+  const res = await fetch(`/api/chats/${encodeURIComponent(id)}/history?limit=${limit}`);
+  const data = await jsonOrThrow<{ steps: CheckpointStep[] }>(res);
+  return data.steps;
+}
+
+/**
+ * Fork the session's agent state back to a past checkpoint — the checkpoint-level
+ * rewind. Unlike `rewindChat` (which drops the transcript tail), this moves the
+ * graph itself to the chosen step, so the next run continues from there.
+ */
+export async function rewindCheckpoint(id: string, checkpointId: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`/api/chats/${encodeURIComponent(id)}/checkpoint`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ checkpointId }),
+  });
+  return jsonOrThrow<{ ok: boolean }>(res);
 }
 
 export function describeLlmError(err: unknown): string {

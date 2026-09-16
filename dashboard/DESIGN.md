@@ -249,6 +249,17 @@ grid, and 2-column forms inside modals. Spacing steps are 6 / 8 / 10 / 14 / 20px
 More space above a heading than below it. The layout optimizes for a single
 operator scanning one screen, not for wide-breakpoint marketing composition.
 
+**The console workspace.** The agent chat is the one view that abandons the
+single-column panel model: it is a three-zone grid — the left nav rail (global),
+a center conversation track, and a right operational rail. At 1440 the center
+takes ~72% and the rail ~28% (`grid-template-columns: minmax(0, 1fr) clamp(304px,
+25vw, 372px)` when open; the rail collapses to `0` and the center reclaims the
+full width when closed). Agent answers take the full center column as a
+structured document; user turns cap narrower (`min(680px, 78%)`) and align right.
+Below 1100px the rail leaves the grid and overlays as a right drawer. The rule is
+*more information density, not a full-width text wall*: the conversation is the
+workspace, and the instrument panel sits beside it, never as a bubble in a void.
+
 ## Elevation & Depth
 
 **Flat by default — no shadow at rest.** Depth is conveyed tonally (surface sits
@@ -315,6 +326,56 @@ content, not the shell.
 Build-time precomputed positions; zero client layout; six layer hues; one edge
 type (resolved wikilink). It is the only surface where the palette opens up, and
 it sets the bar every other panel must not distract from.
+
+### Signature Component: the agent console
+The chat inside a Swarm agent is the product's control surface — a three-zone
+execution workspace, not a chat column. It refuses the wait-then-answer chatbot
+default and reads instead as an instrument panel:
+
+- **The console header.** Identity on the left (avatar tile, name, mono role),
+  the live state block beside it (lamp + state word + `heartbeat 2.1s ago` +
+  what-it-is-doing sub-line), the session id, then the actions scoped to this
+  agent: Focus-in-graph, the conversation's model picker, New chat, and the rail
+  toggle. It reads as *selecting an active worker*, not opening a conversation.
+- **The telemetry strip.** HEARTBEAT · STATUS · UPTIME · TASK QUEUE · ERROR RATE
+  · THROUGHPUT · LATENCY, every cell derived from real backend state and rendered
+  in mono tabular numerals. When a reading cannot be measured yet it shows `—`
+  (with `no history` as a sub-line), never a fake zero. The header carries the
+  live state word (WORKING / LIVE / IDLE / STALE / OFFLINE) with a lamp.
+- **The execution spine.** A turn folds the real SSE stream into a vertical
+  hairline spine of discrete activities (thinking, search, read, run, delegate,
+  answer), each a small circular status node — the one shape reserved for data.
+  Exactly one node carries Instrument-Blue at a time: the freshest still-running
+  step (One Voice Rule). Settled sections collapse; the active one stays open.
+- **The reasoning block.** The model's streamed reasoning is a collapsed
+  `<details>` that shows a measured summary (`REASONING · 4.2s · 8 operations`)
+  folded from the turn's own trace — never raw chain-of-thought front and centre.
+- **The command composer.** Anchored at the bottom of the center track, carrying
+  a context strip (`A1 › model`) so a command visibly names its target, then the
+  textarea and the action row (attach, Reasoning, Deep research, voice, send).
+- **The operational rail.** A persistent right panel with three tabs — Console,
+  History, Config — so the center stays pure conversation. Console stacks four
+  sections under mono headings: **SWARM** (every agent with its live telemetry
+  state and lamp; click to switch), **CURRENT TASKS** (the run actually in flight
+  plus the queue), **AGENT ACTIVITY** (newest-first, folded from the real
+  execution trace, not a synthesized feed), and **KNOWLEDGE GROWTH** (the graph's
+  node-creation curve). History folds the session list; Config folds the existing
+  per-agent configuration pane. Below 1100px the rail becomes a right drawer with
+  a veil and its own close control, and the conversation goes full width.
+- **The empty state.** Addresses the worker, not the visitor: the agent's tile,
+  name and role, then `What should I investigate?` and four operational starters
+  (Research a topic / Analyze existing knowledge / Investigate a source / Trace
+  relationships). Never a generic "How can I help?".
+- **Derived, never mocked.** The figures fold from the in-process run registry,
+  the persisted `messages` table (timestamps + recorded event log) and
+  `process.uptime()`, served by `GET /api/telemetry` and polled by the client.
+- **Knowledge references.** An answer's `[[wikilinks]]` render inline as accent
+  citations *and* as a `N REFERENCES` chip strip beneath it; both route to the
+  same "focus in graph" action, keeping the conversation wired to the live graph.
+
+Like the graph, the console earns its motion: the spine, the status lamp, the
+typewriter reveal and the drawer slide are the only animations, all short and all
+stilled under `prefers-reduced-motion`.
 
 ## Do's and Don'ts
 

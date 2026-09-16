@@ -15,6 +15,7 @@ from langchain_core.tools import BaseTool
 
 from .llm import build_model
 from .models import RunRequest
+from .store import get_store
 
 log = logging.getLogger("agent.subagent")
 
@@ -52,7 +53,7 @@ async def run_subagent(
         f"research task. Do the work yourself using your tools; do not ask for clarification. "
         f"Return a concise, self-contained result the orchestrator can use directly.\n\nGoal: {goal}"
     )
-    agent = create_agent(model=build_model(req), tools=tools, system_prompt=prompt)
+    agent = create_agent(model=build_model(req), tools=tools, system_prompt=prompt, store=get_store())
     try:
         result = await asyncio.wait_for(
             agent.ainvoke(

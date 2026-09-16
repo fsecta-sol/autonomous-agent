@@ -39,8 +39,10 @@ export const TOOL_CATALOG: ToolInfo[] = [
   {
     name: "fetch_url",
     description:
-      "Fetch a public web page over http/https and return its text content (HTML stripped, " +
-      "truncated). Use to read documentation or articles the user references by URL.",
+      "Fetch a public web page and return its text content as clean Markdown (HTML stripped, " +
+      "truncated; PDFs are text-extracted). Handles Cloudflare-protected pages automatically by " +
+      "escalating from a fast HTTP fetch to a headless browser that can solve the challenge. Use " +
+      "to read documentation or articles the user references by URL.",
     enabledByDefault: true,
   },
   {
@@ -80,6 +82,37 @@ export const TOOL_CATALOG: ToolInfo[] = [
       "decompose or parallelize a task (e.g. one sub-agent gathers sources, another checks a " +
       "specific relationship). Off by default; enable it on the agent you want to act as an " +
       "orchestrator.",
+    enabledByDefault: false,
+  },
+  {
+    name: "batch_research",
+    description:
+      "Run the same task over many items in parallel, one sub-agent per item (e.g. check " +
+      "liquidity for each of these 30 tokens at once). Use it instead of many spawn_subagent " +
+      "calls when the work is the same shape repeated across a list. Off by default; enable it " +
+      "on the agent you want to act as an orchestrator.",
+    enabledByDefault: false,
+  },
+  {
+    name: "memory_save",
+    description:
+      "Save a durable fact to long-term memory, remembered across future chats (a conclusion, " +
+      "a decision the operator made, a reliable source). Off by default; enable it on agents " +
+      "that should build up knowledge over time.",
+    enabledByDefault: false,
+  },
+  {
+    name: "memory_search",
+    description:
+      "Search long-term memory for facts saved in this or earlier chats. Use it before starting " +
+      "research on a subject to recall what was already established. Off by default.",
+    enabledByDefault: false,
+  },
+  {
+    name: "memory_forget",
+    description:
+      "Delete one long-term memory by its key, as returned by memory_save or memory_search. " +
+      "Off by default.",
     enabledByDefault: false,
   },
   {

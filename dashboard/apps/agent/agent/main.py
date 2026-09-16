@@ -14,14 +14,17 @@ from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from .checkpointer import close_checkpointer, get_checkpointer, init_checkpointer
 from .config import agent_port
+from .control import list_history, rewind_to
 from .graph import stream_run
 from .models import RunRequest
 from .spawn_log import list_spawns
 from .spawns import extract_spawns
 from .sse import frame, keepalive
+from .store import close_store, init_store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -30,12 +33,15 @@ log = logging.getLogger("agent.main")
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Open the checkpoint store for the life of the process."""
+    """Open the checkpoint store (thread state) and the memory store (cross-
+    session facts) for the life of the process."""
     await init_checkpointer()
+    await init_store()
     try:
         yield
     finally:
         await close_checkpointer()
+        await close_store()
 
 
 app = FastAPI(title="dashboard-agent", version="0.1.0", lifespan=lifespan)
@@ -136,6 +142,20 @@ async def state(thread_id: str) -> dict:
     return {"paused": False, "interrupt": None}
 
 
+@app.delete("/thread/{thread_id}")
+async def delete_thread(thread_id: str) -> dict:
+    """Drop a thread's durable checkpoint so its next run starts fresh.
+
+    The backend calls this when the operator regenerates a reply or edits an
+    earlier turn: the message tail is rewound in SQLite, and without clearing
+    the checkpoint the graph would keep appending to stale state instead of
+    re-seeding from the rewound transcript. Best-effort — a thread with no
+    checkpoint is already clean, so `adelete_thread` on a missing id is a no-op.
+    """
+    await get_checkpointer().adelete_thread(thread_id)
+    return {"ok": True}
+
+
 @app.get("/spawns/{thread_id}")
 async def spawns(thread_id: str) -> dict:
     """The sub-agents this orchestrator thread has spawned, in order.
@@ -154,6 +174,26 @@ async def spawns(thread_id: str) -> dict:
         return {"spawns": []}
     messages = slot.checkpoint.get("channel_values", {}).get("messages", [])
     return {"spawns": extract_spawns(messages)}
+
+
+@app.get("/history/{thread_id}")
+async def history(thread_id: str, limit: int = 50) -> dict:
+    """A thread's saved checkpoints, newest first — one entry per step the run
+    graph took. Drives the UI's step timeline and the rewind picker."""
+    steps = await list_history(thread_id, limit=max(1, min(limit, 500)))
+    return {"steps": steps}
+
+
+class RewindBody(BaseModel):
+    checkpointId: str
+
+
+@app.post("/rewind/{thread_id}")
+async def rewind(thread_id: str, body: RewindBody) -> dict:
+    """Fork a thread back to a past checkpoint (time travel). Everything after it
+    is dropped; the next `/run` continues from there. This is checkpoint-level
+    rewind — the backend also rewinds its own transcript in step with this."""
+    return await rewind_to(thread_id, body.checkpointId)
 
 
 if __name__ == "__main__":
