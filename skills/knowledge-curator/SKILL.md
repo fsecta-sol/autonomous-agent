@@ -33,13 +33,20 @@ Diagram shows the tree starting AT your workdir (so `00-Inbox/` is at the top le
 │   └── _processed/        ← move inputs here after processing
 │       └── YYYY-MM-DD/
 ├── 01-Daily/
-│   └── YYYY-MM-DD.md      ← append your daily log here
+│   └── YYYY-MM-DD.txt     ← append your daily log here (use .txt — Obsidian indexes .md for graph)
+├── 02-Projects/
+│   ├── <project>.md        ← project notes (token, chain, infra) — written by project-researcher
+│   ├── TEMPLATE-token.txt  ← token project note template
+│   └── TEMPLATE-chain.txt  ← chain/infra project note template
 ├── 03-Areas/
-│   └── concepts/          ← YOUR OUTPUT (concept notes live here)
+│   └── concepts/           ← YOUR OUTPUT (concept notes live here)
 │       └── <concept-slug>.md
+├── 04-Archive/
+│   └── <project>/          ← archived deep-dive reports, forensic data, raw research (use .txt)
+└── tor_sources/            ← deprecated — do not use
 ```
 
-You do **not** write to `02-Projects/` (that is for the alpha scanner skill, not you). You do **not** write to `04-Archive/`. You do **not** modify `_index.md` files anywhere.
+You do **not** write to `02-Projects/` (that is for the project-researcher skill, not you). You do **not** write to `04-Archive/`. You do **not** modify `_index.md` files anywhere.
 
 ## Input types you will encounter
 

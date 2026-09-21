@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { createSession, listSessions } from "@/lib/db/sessions";
+import { createSession, deleteSessions, listSessions } from "@/lib/db/sessions";
 import { requireOperator } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -32,4 +32,26 @@ export async function POST(request: NextRequest) {
     model: typeof body.model === "string" && body.model.trim() ? body.model.trim() : null,
   });
   return Response.json(session, { status: 201 });
+}
+
+/**
+ * Bulk-delete sessions: `{ ids: [...] }`. One statement, not N requests, so a
+ * large selection deletes atomically and never hammers the DB. Returns the ids
+ * that were actually removed, plus a `missing` list — an id already gone is not
+ * an error, so a client can honestly report "deleted N of M" for a partial set.
+ */
+export async function DELETE(request: NextRequest) {
+  const gate = await requireOperator();
+  if (gate instanceof Response) return gate;
+  let body: { ids?: unknown } = {};
+  try {
+    body = (await request.json()) as { ids?: unknown };
+  } catch {
+    return Response.json({ error: "Malformed JSON body" }, { status: 400 });
+  }
+  const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+  if (!ids.length) return Response.json({ error: "ids is required" }, { status: 400 });
+  const deleted = deleteSessions(ids);
+  const missing = [...new Set(ids)].filter((id) => !deleted.includes(id));
+  return Response.json({ deleted, missing });
 }

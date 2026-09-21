@@ -187,6 +187,15 @@ def get_index() -> Index:
     return _index
 
 
+def invalidate() -> None:
+    """Drop the cached index so the next `get_index` re-walks the vault. Called
+    after a Knowledge-Manager write so a search that follows a create/enrich sees
+    the change at once instead of waiting out the revalidate window."""
+    global _index, _checked_at
+    _index = None
+    _checked_at = 0.0
+
+
 def _bm25(tf: int, length: int, avg_len: float, idf: float) -> float:
     if tf == 0:
         return 0.0

@@ -1,3 +1,5 @@
+import type { PermissionDecision, PermissionMode } from "./types";
+
 /** A tool invocation event surfaced mid-stream. */
 export interface ToolStreamEvent {
   type: "tool";
@@ -27,7 +29,7 @@ export interface SpawnEvent {
  * replayed step durations match what the operator saw live.
  */
 export interface RunEvent {
-  type: "text" | "reasoning" | "tool" | "warning" | "error" | "done" | "interrupt";
+  type: "text" | "reasoning" | "tool" | "permission" | "mode" | "warning" | "error" | "done" | "interrupt";
   text?: string;
   message?: string;
   phase?: "start" | "end";
@@ -37,6 +39,22 @@ export interface RunEvent {
   error?: boolean;
   id?: string | null;
   tool?: string | null;
+  /** on a `permission`/`interrupt` envelope: the policy mode the run was using */
+  mode?: "ask" | "bypass";
+  /** on a `mode` envelope: the policy transition (e.g. ask → bypass) */
+  from?: "ask" | "bypass";
+  to?: "ask" | "bypass";
+  /** on a `permission` envelope: the decision this tool's policy produced */
+  decision?: "pending" | "approved" | "rejected" | "bypassed" | "denied";
+  /**
+   * Set on a recorded `interrupt` once a mode switch auto-resolved its pause:
+   * the envelope stays in the log (the ASK-policy request is history) but a
+   * re-attach must not re-raise its card. The superseding `mode`/`permission`
+   * events are what explain it — this flag is never a silent deletion.
+   */
+  superseded?: boolean;
+  /** on a `permission` envelope: why this decision was reached ("mode-change"). */
+  reason?: "mode-change";
   t?: number;
 }
 
@@ -67,6 +85,7 @@ export type ActivityKind =
   | "validate"
   | "output"
   | "answer"
+  | "permission"
   | "tool";
 
 export type ActivityStatus = "running" | "done" | "error";
@@ -76,10 +95,13 @@ export interface ActivityBranch {
   id: string;
   /** the sub-agent's role, e.g. "source scout" */
   agent: string;
+  /** the task the orchestrator handed this sub-agent (its goal) */
   label: string;
   status: ActivityStatus;
   startedAt?: number;
   finishedAt?: number | null;
+  /** the sub-agent's returned summary, once it settles */
+  result?: string | null;
 }
 
 export interface ActivityStep {
@@ -99,6 +121,16 @@ export interface ActivityStep {
   finishedAt?: number | null;
   /** live sub-agents under a "delegate" step */
   branches?: ActivityBranch[];
+  /**
+   * The tool-execution policy this step ran under, and the decision it produced.
+   * Present only for a protected tool (e.g. run_command): it is what lets the
+   * timeline show "Policy: BYPASS · bypassed" vs "Policy: ASK · awaiting
+   * approval", and it is reconstructed from the recorded envelope on replay — so
+   * an old run shows the mode it actually ran under, never the session's today.
+   * `reason === "mode-change"` marks a decision produced by an ASK→BYPASS switch
+   * (the pending request was auto-resolved), which is never shown as an approval.
+   */
+  permission?: { mode: PermissionMode; decision: PermissionDecision; reason?: "mode-change" };
 }
 
 export interface ActivityGroup {
@@ -122,6 +154,7 @@ const SECTION: Record<ActivityKind, string> = {
   delegate: "Delegation",
   output: "Synthesis",
   answer: "Synthesis",
+  permission: "Analysis",
 };
 
 /** Where a bare "Thinking" node sits when nothing precedes it. */
@@ -283,6 +316,74 @@ export function applyToolStart(
   ];
 }
 
+/**
+ * A protected tool announced its policy decision. Attach it to the newest
+ * running step for that tool so the row can show "Policy: BYPASS · bypassed" or
+ * "Policy: ASK · awaiting approval". This is what makes the absence of an
+ * approval card self-explanatory — under bypass there is a visible record that
+ * the gate was skipped, distinct from (and never shown as) an approval.
+ */
+export function applyPermission(steps: ActivityStep[], e: RunEvent, now: number = Date.now()): ActivityStep[] {
+  const name = e.tool ?? e.name ?? "";
+  const mode = e.mode === "bypass" ? "bypass" : "ask";
+  const decision = e.decision ?? (mode === "bypass" ? "bypassed" : "pending");
+  const byMode = e.reason === "mode-change";
+  const permission: NonNullable<ActivityStep["permission"]> = {
+    mode,
+    decision,
+    reason: byMode ? "mode-change" : undefined,
+  };
+  const copy = steps.slice();
+  for (let i = copy.length - 1; i >= 0; i--) {
+    const s = copy[i];
+    if (s.status === "running" && (s.tool === name || s.title === humanize(name))) {
+      copy[i] = { ...s, permission };
+      return copy;
+    }
+  }
+  // No open tool row (e.g. replays that began mid-tool): append a marker so the
+  // decision is never silently dropped from the trace. A mode-change resolution
+  // (the pending request was auto-approved because the operator switched to
+  // BYPASS) is labelled distinctly — it is NOT the operator's approval.
+  return [
+    ...copy,
+    {
+      id: nextId("perm"),
+      kind: "permission",
+      status: decision === "bypassed" ? "done" : "running",
+      title: byMode ? "Pending request auto-approved" : decision === "bypassed" ? "Permission bypassed" : "Approval required",
+      description: byMode ? "Permission mode changed to BYPASS — the pending request ran without an operator decision." : undefined,
+      tool: name || "tool",
+      startedAt: now,
+      permission,
+    },
+  ];
+}
+
+/**
+ * The operator switched the session's permission mode mid-run. Record it as its
+ * own step so the timeline states, in the run's own history, that the policy
+ * changed — e.g. "ASK → BYPASS". Kept separate from the tool's permission line so
+ * the *cause* (a mode change) and the *effect* (a request auto-approved) are both
+ * legible, and neither is conflated with an operator approval.
+ */
+export function applyMode(steps: ActivityStep[], e: RunEvent, now: number = Date.now()): ActivityStep[] {
+  const from = e.from === "bypass" ? "bypass" : "ask";
+  const to = e.to === "bypass" ? "bypass" : "ask";
+  return [
+    ...closeThinking(steps, "reviewing", now),
+    {
+      id: nextId("mode"),
+      kind: "permission",
+      status: "done",
+      title: "Permission mode changed",
+      description: `${from.toUpperCase()} → ${to.toUpperCase()}`,
+      startedAt: now,
+      finishedAt: now,
+    },
+  ];
+}
+
 /** A tool finishing: settle the newest matching running step with its result. */
 export function applyToolEnd(
   steps: ActivityStep[],
@@ -293,7 +394,15 @@ export function applyToolEnd(
   for (let i = copy.length - 1; i >= 0; i--) {
     const s = copy[i];
     if (s.status === "running" && (s.tool === e.name || s.title === humanize(e.name))) {
-      copy[i] = { ...s, status: e.error ? "error" : "done", finishedAt: now, result: e.result };
+      // A protected tool that was waiting under ASK has now resolved: an error
+      // result is the operator's rejection (or a failure), a clean result means
+      // the approval was granted. Settle the policy line so it never keeps
+      // reading "Awaiting approval" after the tool has finished.
+      const permission =
+        s.permission && s.permission.decision === "pending"
+          ? { ...s.permission, decision: (e.error ? "rejected" : "approved") as PermissionDecision }
+          : s.permission;
+      copy[i] = { ...s, status: e.error ? "error" : "done", finishedAt: now, result: e.result, permission };
       return copy;
     }
   }
@@ -373,6 +482,7 @@ export function syncSpawns(steps: ActivityStep[], spawns: SpawnEvent[]): Activit
       status,
       startedAt: sp.startedAt,
       finishedAt: sp.finishedAt ?? null,
+      result: sp.result ?? null,
     };
     // prefer a delegate step already carrying this role as a branch
     let target = delegateIdx.find((i) => (copy[i].branches ?? []).some((b) => b.agent === sp.role));
@@ -386,6 +496,35 @@ export function syncSpawns(steps: ActivityStep[], spawns: SpawnEvent[]): Activit
     };
   }
   return copy;
+}
+
+/**
+ * Merge adjacent delegate steps into one. The orchestrator can emit several
+ * `spawn_subagent` calls back to back (parallel workers), which the reducer
+ * records as separate steps; on screen they are one delegation event with a
+ * fan-out of sub-agents, so they are coalesced into a single delegate step
+ * that carries every branch. The merged step is running while any branch runs,
+ * errored if any failed, else done. Non-delegate steps pass through untouched.
+ */
+export function coalesceDelegations(steps: ActivityStep[]): ActivityStep[] {
+  const out: ActivityStep[] = [];
+  for (const s of steps) {
+    const prev = out[out.length - 1];
+    if (s.kind === "delegate" && prev && prev.kind === "delegate") {
+      const branches = [...(prev.branches ?? []), ...(s.branches ?? [])];
+      const status: ActivityStatus = branches.some((b) => b.status === "running")
+        ? "running"
+        : branches.some((b) => b.status === "error")
+          ? "error"
+          : "done";
+      const finishedAt =
+        status === "running" ? null : Math.max(prev.finishedAt ?? 0, s.finishedAt ?? 0) || null;
+      out[out.length - 1] = { ...prev, branches, status, finishedAt };
+    } else {
+      out.push(s);
+    }
+  }
+  return out;
 }
 
 /** Segment an ordered trace into contiguous, collapsible sections. */
@@ -428,6 +567,8 @@ export function replayTrace(events: RunEvent[]): ActivityStep[] {
     lastTs = now;
     if (e.type === "reasoning") steps = applyReasoning(steps, now);
     else if (e.type === "text") steps = applyText(steps, now);
+    else if (e.type === "mode") steps = applyMode(steps, e, now);
+    else if (e.type === "permission") steps = applyPermission(steps, e, now);
     else if (e.type === "tool" && e.phase === "start") steps = applyToolStart(steps, e as ToolStreamEvent, now);
     else if (e.type === "tool" && e.phase === "end") steps = applyToolEnd(steps, e as ToolStreamEvent, now);
   }

@@ -1,5 +1,5 @@
 import { appendMessage } from "@/lib/db/sessions";
-import type { RunEvent } from "@dashboard/shared";
+import type { RunEvent, PermissionMode } from "@dashboard/shared";
 
 /**
  * In-process registry of in-flight agent runs, one per chat session.
@@ -41,6 +41,22 @@ export interface ActiveRun {
   paused: boolean;
   /** set when the operator pressed Stop */
   aborted: boolean;
+  /**
+   * The tool-execution policy this run executes under. It is re-resolved on
+   * every resume from the session's CURRENT mode — so an ASK→BYPASS switch
+   * mid-pause resumes the run under bypass and the replayed tool node runs
+   * without a gate. It is never applied retroactively to a settled tool call.
+   */
+  permissionMode: PermissionMode;
+  /** the interrupt id of the current pause, for reference on resume */
+  interruptId?: string | null;
+  /**
+   * Set the instant a paused run is claimed for resume — by the operator's
+   * approval OR by the mode-switch auto-resolve. Exactly one claimer wins, so
+   * the two racing paths can never both drive the run: the tool executes once,
+   * and a pending request has a single terminal transition.
+   */
+  resuming: boolean;
   error?: string;
 }
 
@@ -91,7 +107,7 @@ export function getRun(sessionId: string): ActiveRun | undefined {
 }
 
 /** Begin a run, or return null if this session already has one. */
-export function startRun(sessionId: string): ActiveRun | null {
+export function startRun(sessionId: string, permissionMode: PermissionMode = "ask"): ActiveRun | null {
   const map = registry();
   if (map.has(sessionId)) return null;
   const now = Date.now();
@@ -105,13 +121,34 @@ export function startRun(sessionId: string): ActiveRun | null {
     done: false,
     paused: false,
     aborted: false,
+    permissionMode,
+    resuming: false,
   };
   map.set(sessionId, run);
   noteActivity(now);
   return run;
 }
 
-/** Continue a paused run: a fresh upstream fetch, accumulators kept intact. */
+/**
+ * Claim a paused run for resume. Exactly one caller wins (`true`): the
+ * operator's approval and the ASK→BYPASS auto-resolve can fire at the same
+ * instant, and only the claimer drives the run — so the pending tool executes
+ * once, with a single terminal transition. A run already claimed, not paused, or
+ * settled returns `false`, and the caller reports "already resolved" instead of
+ * dispatching a second upstream fetch.
+ */
+export function claimResume(run: ActiveRun): boolean {
+  if (run.done || !run.paused || run.resuming) return false;
+  run.resuming = true;
+  return true;
+}
+
+/**
+ * Continue a paused run: a fresh upstream fetch, accumulators kept intact.
+ * `resuming` is deliberately left set — it stays true for the whole resumed run
+ * (and is cleared only if this run pauses AGAIN, in the pump), so no second
+ * claimer can drive the same resume.
+ */
 export function resumeRun(run: ActiveRun): ActiveRun {
   run.controller = new AbortController();
   run.paused = false;
@@ -119,6 +156,46 @@ export function resumeRun(run: ActiveRun): ActiveRun {
   run.error = undefined;
   run.done = false;
   return run;
+}
+
+/**
+ * Record an ASK→BYPASS auto-resolution in the run's event log. This is the
+ * honest audit trail: the pending request was made under ASK, and the mode
+ * switch — not the operator — resolved it. Two envelopes are appended:
+ *   mode       — "Permission mode changed ASK → BYPASS"
+ *   permission — the tool's decision, `bypassed`, reason `mode-change`
+ * The paused request's own `interrupt` envelope is marked `superseded` (kept,
+ * not deleted) so a re-attach replays the history without re-raising its card.
+ * Returns the tool the resumed request was for, if it could be determined.
+ */
+export function noteModeChangeResume(run: ActiveRun, from: PermissionMode, to: PermissionMode): void {
+  const now = Date.now();
+  let tool: string | null = null;
+  for (let i = run.events.length - 1; i >= 0; i--) {
+    const ev = run.events[i];
+    if (ev.type === "interrupt" && !ev.superseded) {
+      ev.superseded = true;
+      tool = ev.tool ?? null;
+      break;
+    }
+  }
+  run.events.push({
+    type: "mode",
+    from: from,
+    to: to,
+    message: `Permission mode changed ${from.toUpperCase()} → ${to.toUpperCase()}`,
+    t: now,
+  });
+  if (to === "bypass") {
+    run.events.push({
+      type: "permission",
+      tool: tool ?? "run_command",
+      mode: "bypass",
+      decision: "bypassed",
+      reason: "mode-change",
+      t: now + 1,
+    });
+  }
 }
 
 /** Stop a run: abort the upstream fetch. The pump still persists the partial. */
@@ -205,7 +282,10 @@ export async function pumpRun(run: ActiveRun, body: ReadableStream<Uint8Array>):
           run.events.push(ev);
           noteActivity(ev.t);
           if (ev.type === "text" && typeof ev.text === "string") run.text += ev.text;
-          if (ev.type === "interrupt") sawInterrupt = true;
+          if (ev.type === "interrupt") {
+            sawInterrupt = true;
+            run.interruptId = ev.id ?? null; // echoed back when this pause resolves
+          }
           // The agent's own `done` is swallowed: we emit `done` ourselves in the
           // finally block AFTER persisting, so a client that reacts to it always
           // reads a row that already exists.
@@ -224,9 +304,12 @@ export async function pumpRun(run: ActiveRun, body: ReadableStream<Uint8Array>):
   } finally {
     clearInterval(heartbeat);
     // Paused for approval: keep the run (and its accumulators) for the resume
-    // call; end the clients' streams but do not persist or drop the entry.
+    // call; end the clients' streams but do not persist or drop the entry. The
+    // claim is released so THIS new pause can be resolved (by an approval or a
+    // mode switch) — a run may pause on several tools over its life.
     if (sawInterrupt && !run.aborted) {
       run.paused = true;
+      run.resuming = false;
       broadcast({ type: "done", t: Date.now() });
       closeSubscribers(run);
       return;

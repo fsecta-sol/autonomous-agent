@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { agentConfigs, mcpServers, skills, type AgentConfigRow } from "@/lib/db/schema";
 import { selectToolNames } from "./tool-catalog";
+import type { PermissionMode } from "./permission";
 
 /** Terminal access level for an agent. The agent service enforces it. */
 export type TerminalMode = "off" | "sandbox" | "unsandboxed";
@@ -15,9 +16,17 @@ export interface AgentConfig {
   mcpServers: string[];
   /** terminal access level for this agent */
   terminalMode: TerminalMode;
+  /** default tool-execution policy for this agent's sessions (a session may override) */
+  permissionMode: PermissionMode;
 }
 
-const DEFAULT_CONFIG: AgentConfig = { tools: null, skills: [], mcpServers: [], terminalMode: "off" };
+const DEFAULT_CONFIG: AgentConfig = {
+  tools: null,
+  skills: [],
+  mcpServers: [],
+  terminalMode: "off",
+  permissionMode: "ask",
+};
 
 function parseJsonArray(raw: string | null | undefined): string[] | null {
   if (raw === null || raw === undefined) return null;
@@ -35,6 +44,7 @@ function toConfig(row: AgentConfigRow): AgentConfig {
     skills: parseJsonArray(row.skills) ?? [],
     mcpServers: parseJsonArray(row.mcpServers) ?? [],
     terminalMode: row.terminalMode ?? "off",
+    permissionMode: row.permissionMode ?? "ask",
   };
 }
 
@@ -51,6 +61,7 @@ export function saveAgentConfig(agentId: string, patch: Partial<AgentConfig>): A
     skills: patch.skills ?? (existing ? (parseJsonArray(existing.skills) ?? []) : []),
     mcpServers: patch.mcpServers ?? (existing ? (parseJsonArray(existing.mcpServers) ?? []) : []),
     terminalMode: patch.terminalMode ?? (existing ? (existing.terminalMode ?? "off") : "off"),
+    permissionMode: patch.permissionMode ?? (existing ? (existing.permissionMode ?? "ask") : "ask"),
   };
   const values = {
     agentId,
@@ -58,6 +69,7 @@ export function saveAgentConfig(agentId: string, patch: Partial<AgentConfig>): A
     skills: JSON.stringify(merged.skills),
     mcpServers: JSON.stringify(merged.mcpServers),
     terminalMode: merged.terminalMode,
+    permissionMode: merged.permissionMode,
     updatedAt: Date.now(),
   };
   if (existing) db.update(agentConfigs).set(values).where(eq(agentConfigs.agentId, agentId)).run();
@@ -84,6 +96,8 @@ export interface ResolvedAgentTooling {
   warnings: string[];
   /** the agent's terminal access level */
   terminalMode: TerminalMode;
+  /** the agent's DEFAULT tool-execution policy (a session may override it) */
+  permissionMode: PermissionMode;
 }
 
 /**
@@ -143,5 +157,12 @@ export function resolveAgentTooling(agentId: string): ResolvedAgentTooling {
     if (sections.length) skillPrompt = sections.join("\n\n");
   }
 
-  return { builtins, mcp, skillPrompt, warnings, terminalMode: config.terminalMode };
+  return {
+    builtins,
+    mcp,
+    skillPrompt,
+    warnings,
+    terminalMode: config.terminalMode,
+    permissionMode: config.permissionMode,
+  };
 }

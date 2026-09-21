@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
-import { createAgent, listAgents, type AgentInput } from "@/lib/db/agents";
+import { createAgent, type AgentInput } from "@/lib/db/agents";
 import { requireOperator } from "@/lib/server/auth";
 import { saveAgentConfig } from "@/lib/server/agent-config";
+import { listAgentsWithTelemetry } from "@/lib/server/telemetry";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const gate = await requireOperator();
   if (gate instanceof Response) return gate;
-  return Response.json({ agents: listAgents() });
+  return Response.json({ agents: listAgentsWithTelemetry() });
 }
 
 /** Coerce an untrusted payload into an AgentInput (core fields only). */

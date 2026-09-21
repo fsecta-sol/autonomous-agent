@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "./workspace.css";
+@import "./research.css";
+@import "../components/ui/AgentActivityIndicator.css";
 
 :root,
 [data-theme="light"] {

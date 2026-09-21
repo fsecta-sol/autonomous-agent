@@ -12,7 +12,6 @@ import uuid
 from collections.abc import AsyncIterator
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import ModelRetryMiddleware, ToolRetryMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
@@ -22,6 +21,7 @@ from .checkpointer import get_checkpointer
 from .config import subagent_timeout_s
 from .llm import build_model
 from .mcp import load_mcp_tools
+from .middleware import tool_upstream_retry_middleware, upstream_retry_middleware
 from .models import RunRequest
 from .sse import run_envelopes
 from .store import get_store
@@ -52,6 +52,14 @@ CACHE_ENABLED = os.environ.get("AGENT_CACHE") == "1"
 SPAWN_TOOL = "spawn_subagent"
 BATCH_TOOL = "batch_research"
 
+# Optional Context-Manager step: before the run, retrieve the knowledge-graph
+# nodes relevant to the user's task and inject them into the system prompt, so
+# the model starts grounded in accumulated knowledge (retaining source,
+# confidence, verification status, relations). Off by default — the agent can
+# always call `knowledge_relevant` itself; this just front-loads it.
+PRECONTEXT_ENABLED = os.environ.get("AGENT_KNOWLEDGE_PRECONTEXT") == "1"
+PRECONTEXT_LIMIT = int(os.environ.get("AGENT_KNOWLEDGE_PRECONTEXT_LIMIT", "6"))
+
 # Tools a sub-agent must NOT receive: the delegation tools themselves (no
 # recursion) and `run_command` (its approval interrupt needs an operator-facing
 # thread, which a headless sub-agent has no way to satisfy).
@@ -59,12 +67,17 @@ SUBAGENT_EXCLUDED = {SPAWN_TOOL, BATCH_TOOL, "run_command"}
 
 
 def _retry_middleware() -> list:
-    """Retry middleware for a run's model and tool calls. See RETRY_MAX."""
+    """Retry middleware for a run's model and tool calls. See RETRY_MAX.
+
+    Transient-only, raising on exhausted retries (`upstream_*_middleware`): the
+    langchain defaults retry *any* exception and swallow failures into a normal
+    reply/tool result, so a permanent upstream error would render as a healthy
+    assistant message. That is the bug this wiring fixes."""
     if RETRY_MAX <= 0:
         return []
     return [
-        ModelRetryMiddleware(max_retries=RETRY_MAX),
-        ToolRetryMiddleware(max_retries=RETRY_MAX),
+        upstream_retry_middleware(max_retries=RETRY_MAX),
+        tool_upstream_retry_middleware(max_retries=RETRY_MAX),
     ]
 
 
@@ -84,7 +97,9 @@ async def _collect_tools(req: RunRequest) -> tuple[list[BaseTool], list[str]]:
     Returns (orchestrator_tools, warnings); the sub-agent set is stashed on the
     spawn tool's budget when the run enables delegation.
     """
-    base = build_tools(req.tools, req.terminalMode, req.allowUnsandboxed, req.agentId)
+    base = build_tools(
+        req.tools, req.terminalMode, req.allowUnsandboxed, req.agentId, req.permissionMode
+    )
     mcp_tools, warnings = await load_mcp_tools(req.mcp)
     all_tools = [*base, *mcp_tools]
 
@@ -105,6 +120,29 @@ def _history_messages(req: RunRequest) -> list:
     for turn in req.history:
         messages.append(HumanMessage(content=turn.content) if turn.role == "user" else AIMessage(content=turn.content))
     return messages
+
+
+def _knowledge_precontext(req: RunRequest) -> str:
+    """The retrieved-knowledge block for this task, or "" when disabled/empty.
+
+    Uses the last user turn as the retrieval query and returns the Manager's
+    rendered context (node + source + confidence + verification + relations),
+    which the caller appends to the system prompt. Best-effort: any failure
+    (empty vault, import error) simply yields no block, never breaking the run.
+    """
+    if not PRECONTEXT_ENABLED:
+        return ""
+    last_user = next((t.content for t in reversed(req.history) if t.role == "user"), "")
+    if not last_user.strip():
+        return ""
+    try:
+        from .knowledge.manager import default_manager
+
+        result = default_manager().get_relevant(last_user, {"limit": PRECONTEXT_LIMIT})
+        return result.get("rendered", "") if result.get("count") else ""
+    except Exception:
+        log.exception("knowledge pre-context failed")
+        return ""
 
 
 async def _run_input(agent, req: RunRequest, config: RunnableConfig):
@@ -141,10 +179,15 @@ async def stream_run(req: RunRequest) -> AsyncIterator[dict]:
         for warning in tool_warnings:
             yield {"type": "warning", "message": warning}
 
+        system = req.system
+        precontext = _knowledge_precontext(req)
+        if precontext:
+            system = f"{system}\n\n{precontext}"
+
         agent = create_agent(
             model=build_model(req),
             tools=tools,
-            system_prompt=req.system,
+            system_prompt=system,
             checkpointer=get_checkpointer(),
             store=get_store(),
             middleware=_retry_middleware(),
@@ -157,7 +200,7 @@ async def stream_run(req: RunRequest) -> AsyncIterator[dict]:
             "recursion_limit": DEFAULT_RECURSION_LIMIT,
         }
         graph_input = await _run_input(agent, req, config)
-        async for envelope in run_envelopes(agent, graph_input, config):
+        async for envelope in run_envelopes(agent, graph_input, config, req.permissionMode):
             yield envelope
     except Exception as err:
         log.exception("run failed")

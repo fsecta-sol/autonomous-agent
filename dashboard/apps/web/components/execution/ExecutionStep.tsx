@@ -3,7 +3,8 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { StatusIndicator } from "./StatusIndicator";
-import { formatDuration, type ActivityBranch, type ActivityKind, type ActivityStep } from "@/lib/execution";
+import { SubAgentCard } from "./SubAgentCard";
+import { formatDuration, type ActivityKind, type ActivityStep } from "@/lib/execution";
 import {
   IconBolt,
   IconBranch,
@@ -30,6 +31,7 @@ const KIND_ICON: Record<ActivityKind, ReactNode> = {
   validate: <IconShield />,
   output: <IconOutput />,
   answer: <IconOutput />,
+  permission: <IconShield />,
   tool: <IconBolt />,
 };
 
@@ -57,8 +59,14 @@ export function ExecutionStep({ step, isCurrent }: { step: ActivityStep; isCurre
   const [expanded, setExpanded] = useState(false);
   const branchCount = step.branches?.length ?? 0;
 
+  // A delegation step is the orchestrator fanning work out to sub-agents. It
+  // gets its own visual treatment (a fan-out of first-class sub-agent cards)
+  // rather than the linear tool row, so "who did A1 spawn?" is answered at a
+  // glance. Parallel spawns sit side by side; a single spawn reads as one card.
+  const delegating = step.kind === "delegate";
+
   return (
-    <li className="ax-step" data-state={step.status} data-current={isCurrent || undefined}>
+    <li className="ax-step" data-state={step.status} data-current={isCurrent || undefined} data-kind={step.kind}>
       <span className="ax-rail" aria-hidden />
       <StatusIndicator status={step.status} />
       <div className="ax-body">
@@ -75,22 +83,29 @@ export function ExecutionStep({ step, isCurrent }: { step: ActivityStep; isCurre
           </p>
         ) : null}
 
-        {step.tool ? (
+        {step.tool && !delegating ? (
           <div className="ax-tool">
             <span className="ax-tool-name">↳ {step.tool}</span>
-            {branchCount ? <span className="ax-tool-count">{branchCount} sub-agent{branchCount === 1 ? "" : "s"}</span> : null}
           </div>
         ) : null}
 
+        {step.permission ? <PermissionNote permission={step.permission} /> : null}
+
         {branchCount ? (
-          <ul className="ax-branches" role="list">
-            {step.branches!.map((b) => (
-              <BranchRow key={b.id} branch={b} />
-            ))}
-          </ul>
+          <div className="sa-fanout">
+            <div className="sa-grid" role="list">
+              {step.branches!.map((b) => (
+                <SubAgentCard key={b.id} branch={b} />
+              ))}
+            </div>
+          </div>
+        ) : delegating && step.status === "running" ? (
+          <span className="sa-pending" role="status">
+            awaiting sub-agent…
+          </span>
         ) : null}
 
-        {hasResult ? (
+        {hasResult && !delegating ? (
           <div className="ax-result" data-expanded={expanded || undefined}>
             <div className="ax-result-head">
               <span className="ax-result-k">{step.status === "error" ? "Error" : "Result"}</span>
@@ -112,19 +127,31 @@ export function ExecutionStep({ step, isCurrent }: { step: ActivityStep; isCurre
   );
 }
 
-/** One live sub-agent under a delegation step. */
-function BranchRow({ branch }: { branch: ActivityBranch }) {
-  const duration = formatDuration(branch.startedAt ?? 0, branch.finishedAt);
+/**
+ * The permission line on a protected tool's step — the audit record of WHY the
+ * tool ran (or paused). Under bypass it reads "Permission bypassed": no approval
+ * was requested, so it must never read "Approved". A request resolved by an
+ * ASK→BYPASS switch reads "Auto-approved · BYPASS" — a mode change, explicitly
+ * not an operator approval. Under ask it reads "Awaiting approval" while paused.
+ */
+function PermissionNote({ permission }: { permission: NonNullable<ActivityStep["permission"]> }) {
+  const bypass = permission.mode === "bypass";
+  const byMode = permission.reason === "mode-change";
+  const label =
+    permission.decision === "bypassed"
+      ? byMode
+        ? "Auto-approved · BYPASS"
+        : "Permission bypassed"
+      : permission.decision === "approved"
+        ? "Approval granted"
+        : permission.decision === "rejected" || permission.decision === "denied"
+          ? "Approval rejected"
+          : "Awaiting approval";
   return (
-    <li className="ax-branch" data-state={branch.status}>
-      <span className="ax-branch-node" aria-hidden />
-      <AgentLabel agent={branch.agent} />
-      <span className="ax-branch-label" title={branch.label || branch.agent}>
-        {branch.label || branch.agent}
-      </span>
-      <span className="ax-branch-status">
-        {branch.status === "running" ? "running" : branch.status === "error" ? "failed" : duration ?? "done"}
-      </span>
-    </li>
+    <div className="ax-perm" data-decision={permission.decision}>
+      <span className="ax-perm-mark" aria-hidden />
+      <span className="ax-perm-label">{label}</span>
+      <span className="ax-perm-policy">Policy: {bypass ? "BYPASS" : "ASK"}</span>
+    </div>
   );
 }

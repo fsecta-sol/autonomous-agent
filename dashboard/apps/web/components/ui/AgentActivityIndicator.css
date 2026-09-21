@@ -1,0 +1,153 @@
+/* ── AgentActivityIndicator ──────────────────────────────────────────────
+   A compact 5-particle signal: subtle travel left → right with staggered
+   opacity / scale / 1px vertical drift on a 1.2 s loop. Replaces the blinking
+   block caret. Hairline-framed, dark-command surface, cyan accent kept quiet —
+   secondary to the streamed text, never a loading page.
+   Compound forbidden: gradients, big spinners, bouncy loaders, halos.          */
+
+/* Host: sits directly under the streamed body, shared with the message column.
+   Keeps its own surface so it reads as one live element, not a loose row of
+   dots. Height is fixed and animated out via grid-template-rows so the bubble
+   never snaps. */
+.agent-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+
+/* Dot-only variant: narrower, secondary to the text above it */
+.agent-signal:not(.agent-signal--labelled) {
+  gap: 0;
+  padding: 7px 12px;
+}
+
+/* Labelled variant (pre-stream idle): carries the agent name + phase detail */
+.agent-signal--labelled {
+  padding: 9px 12px;
+}
+.agent-signal-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.agent-signal-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.agent-signal-detail {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── the particle cluster ─────────────────────────────────────────────── */
+.agent-signal-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.agent-signal-dots i {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  /* stagger: left → right; delay = index × step */
+  animation: agent-dot 1.2s var(--ease) infinite;
+  animation-delay: calc(var(--i) * 0.1s);
+  will-change: opacity, transform;
+}
+
+/* subtle scale/opacity arc + micro vertical drift; no bounce, no glow */
+@keyframes agent-dot {
+  0% {
+    opacity: 0.22;
+    transform: translateY(0) scale(0.72);
+  }
+  18% {
+    opacity: 0.55;
+    transform: translateY(-0.5px) scale(0.92);
+  }
+  36% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1);
+  }
+  54% {
+    opacity: 0.55;
+    transform: translateY(-0.5px) scale(0.92);
+  }
+  72%, 100% {
+    opacity: 0.22;
+    transform: translateY(0) scale(0.72);
+  }
+}
+
+/* entrance / exit: fade + height via grid so removal never snaps the bubble */
+.agent-signal {
+  animation: agent-signal-in 0.18s var(--ease);
+}
+@keyframes agent-signal-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Wrapper that owns height transition so unmount doesn't jump.
+   Caller: <div className="agent-signal-wrap" data-open> <AgentActivityIndicator/> </div> */
+.agent-signal-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  /* the message column's flex gap would still reserve 4px above a 0-height
+     wrapper; cancel it while collapsed so the settled bubble leaves no gap */
+  margin-top: -4px;
+  transition:
+    grid-template-rows 0.22s var(--ease),
+    opacity 0.18s var(--ease),
+    margin-top 0.22s var(--ease);
+}
+.agent-signal-wrap[data-open] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-top: 0;
+}
+.agent-signal-wrap > * {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── dark tuning: dots stay legible, surface stays quiet ──────────────── */
+[data-theme="dark"] .agent-signal {
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+}
+
+/* Reduced motion: static, still legible, no travel */
+@media (prefers-reduced-motion: reduce) {
+  .agent-signal-dots i {
+    animation: none;
+    opacity: 0.55;
+    transform: none;
+  }
+  .agent-signal {
+    animation: none;
+  }
+  .agent-signal-wrap {
+    transition: opacity 0.01ms;
+  }
+}

@@ -15,6 +15,23 @@ def vault_root() -> Path:
     return Path(os.environ.get("VAULT_ROOT", "/home/hermes/vault")).resolve()
 
 
+def vault_write_root() -> Path:
+    """Root knowledge writes land in. Defaults to the vault itself.
+
+    A research run stages its notes in a per-run workspace instead (see
+    `vault_store.staging`), so a run that goes off-topic cannot dirty the shared
+    vault; the notes are only promoted in once the run is done and vetted. This
+    env var is the process-wide fallback for writers that are not a research run.
+    """
+    override = os.environ.get("VAULT_WRITE_ROOT")
+    return Path(override).resolve() if override else vault_root()
+
+
+def agent_workspaces_root() -> Path:
+    """Root under which each research run gets an isolated write workspace."""
+    return Path(os.environ.get("AGENT_WORKSPACES_DIR", str(data_dir() / "workspaces"))).resolve()
+
+
 def backend_internal_url() -> str:
     """Base URL of the backend's internal tool endpoints."""
     return os.environ.get("BACKEND_INTERNAL_URL", "http://127.0.0.1:3011").rstrip("/")
@@ -62,6 +79,40 @@ def store_db_path() -> Path:
     return Path(os.environ.get("AGENT_STORE_DB", str(default)))
 
 
+def data_dir() -> Path:
+    """Writable data root owned by the agent (checkpoints, spawns, memory, and
+    the Knowledge Manager's derived index + event log)."""
+    default = Path(__file__).resolve().parent.parent / "data"
+    return Path(os.environ.get("AGENT_DATA_DIR", str(default)))
+
+
+def knowledge_index_path() -> Path:
+    """Derived knowledge index. Rebuildable from the Markdown vault alone."""
+    return Path(os.environ.get("AGENT_KNOWLEDGE_INDEX", str(data_dir() / "knowledge-index.json")))
+
+
+def knowledge_log_path() -> Path:
+    """Append-only JSONL of KNOWLEDGE_* operations (observability)."""
+    return Path(os.environ.get("AGENT_KNOWLEDGE_LOG", str(data_dir() / "knowledge-log.jsonl")))
+
+
+def knowledge_lock_path() -> Path:
+    """Advisory lock guarding concurrent vault writes across processes."""
+    return Path(os.environ.get("AGENT_KNOWLEDGE_LOCK", str(data_dir() / ".knowledge.lock")))
+
+
+def research_db_path() -> Path:
+    """SQLite database for the Research Loop's durable state: runs, iterations,
+    candidates, attempts and the research event log. Owned by the agent,
+    separate from the checkpoints/memory/spawn stores."""
+    return Path(os.environ.get("AGENT_RESEARCH_DB", str(data_dir() / "research.db")))
+
+
+def research_events_path() -> Path:
+    """Append-only JSONL mirror of research events (observability)."""
+    return Path(os.environ.get("AGENT_RESEARCH_LOG", str(data_dir() / "research-events.jsonl")))
+
+
 def max_subagents() -> int:
     """Cap on sub-agents one orchestrator run may spawn (guards runaway cost)."""
     try:
@@ -71,12 +122,50 @@ def max_subagents() -> int:
 
 
 def subagent_timeout_s() -> float:
-    """Per-sub-agent wall-clock limit, in seconds. Generous by default because
-    a sub-agent on a slow endpoint may make several model calls."""
+    """Per-sub-agent *idle* limit, in seconds — NOT a wall-clock cap.
+
+    The sub-agent's deadline resets on every streamed event, so a sub-agent that
+    keeps making progress (streaming a long answer, a slow-but-returning fetch)
+    may run far longer than this in total; only a genuine stall — no progress for
+    this long — stops it. Tune with `AGENT_SUBAGENT_TIMEOUT_S`."""
     try:
         return float(os.environ.get("AGENT_SUBAGENT_TIMEOUT_S", "300"))
     except ValueError:
         return 300.0
+
+
+def subagent_recursion_limit() -> int:
+    """Tool-round budget for a headless sub-agent (LangGraph recursion limit).
+    The default suits a focused, quick delegation; a deep-research sub-agent on a
+    long-horizon run needs more rounds before it hits the graph's stop condition."""
+    try:
+        return max(1, int(os.environ.get("AGENT_SUBAGENT_RECURSION_LIMIT", "15")))
+    except ValueError:
+        return 15
+
+
+# Effectively-infinite retry budget for a sub-agent's model calls. The loop still
+# ends because a sub-agent that makes no progress for `AGENT_SUBAGENT_TIMEOUT_S`
+# (an idle limit, see `subagent_timeout_s`) is stopped, so "unbounded" here means
+# "keep retrying a transient upstream error while the endpoint is still talking,
+# not a fixed handful of times". Retry backoff sleeps emit no stream events, so a
+# run of exhausted retries is itself what trips the idle limit.
+_INFINITE_RETRIES = 10**9
+
+
+def subagent_retry_attempts() -> int:
+    """How many times a sub-agent retries a *transient* upstream error (a 503
+    "model temporarily unavailable", a 429, a dropped connection). Set
+    `AGENT_SUBAGENT_RETRY_ATTEMPTS` to a whole number, or to `inf`/`infinite`/`-1`
+    for unbounded retry bounded only by the sub-agent's idle timeout. Permanent
+    errors (auth, bad request) are never retried regardless of this value."""
+    raw = os.environ.get("AGENT_SUBAGENT_RETRY_ATTEMPTS", str(_INFINITE_RETRIES)).strip().lower()
+    if raw in ("inf", "infinite", "-1", "unlimited"):
+        return _INFINITE_RETRIES
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return _INFINITE_RETRIES
 
 
 def max_batch_items() -> int:

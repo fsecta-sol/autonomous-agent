@@ -36,6 +36,20 @@
       "when": 1789274151912,
       "tag": "0004_mushy_jubilee",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789392642927,
+      "tag": "0005_material_sage",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789545373483,
+      "tag": "0006_graceful_brood",
+      "breakpoints": true
     }
   ]
 }

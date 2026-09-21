@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { deleteSession, getSession, updateSession } from "@/lib/db/sessions";
 import { requireOperator } from "@/lib/server/auth";
+import { asPermissionMode } from "@/lib/server/permission";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const session = updateSession(id, {
     title: typeof body.title === "string" ? body.title : undefined,
     model: body.model === null || typeof body.model === "string" ? (body.model as string | null) : undefined,
+    // null clears the session override (back to inheriting the agent default)
+    permissionMode:
+      body.permissionMode === null ? null : (asPermissionMode(body.permissionMode) ?? undefined),
     pinned: typeof body.pinned === "boolean" ? body.pinned : undefined,
     archived: typeof body.archived === "boolean" ? body.archived : undefined,
   });

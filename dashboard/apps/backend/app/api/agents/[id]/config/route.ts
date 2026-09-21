@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireOperator } from "@/lib/server/auth";
 import { getAgentConfig, saveAgentConfig, type TerminalMode } from "@/lib/server/agent-config";
+import { asPermissionMode } from "@/lib/server/permission";
 
 const TERMINAL_MODES = new Set<TerminalMode>(["off", "sandbox", "unsandboxed"]);
 
@@ -39,6 +40,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (typeof body.terminalMode === "string" && TERMINAL_MODES.has(body.terminalMode as TerminalMode)) {
     patch.terminalMode = body.terminalMode as TerminalMode;
   }
+  const perm = asPermissionMode(body.permissionMode);
+  if (perm) patch.permissionMode = perm;
 
   return Response.json(saveAgentConfig(id, patch));
 }

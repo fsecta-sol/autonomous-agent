@@ -11,6 +11,7 @@ import {
   type McpServer,
   type Skill,
   type TerminalMode,
+  type PermissionMode,
 } from "@/lib/api";
 import { IconCheck } from "@/components/ui/icons";
 import { Modal } from "@/components/ui/Modal";
@@ -35,6 +36,7 @@ export function AgentConfigPane({ agentId }: { agentId: string }) {
   const [mcpSel, setMcpSel] = useState<Set<string>>(new Set());
   const [skillSel, setSkillSel] = useState<Set<string>>(new Set());
   const [terminalMode, setTerminalMode] = useState<TerminalMode>("off");
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("ask");
   const [allowUnsandboxed, setAllowUnsandboxed] = useState(false);
   const [confirmUnsafe, setConfirmUnsafe] = useState(false);
 
@@ -58,6 +60,7 @@ export function AgentConfigPane({ agentId }: { agentId: string }) {
         setMcpSel(new Set(cfg.mcpServers));
         setSkillSel(new Set(cfg.skills));
         setTerminalMode(cfg.terminalMode ?? "off");
+        setPermissionMode(cfg.permissionMode ?? "ask");
       } catch {
         if (!cancelled) setError("Could not load the agent's configuration.");
       } finally {
@@ -98,9 +101,11 @@ export function AgentConfigPane({ agentId }: { agentId: string }) {
         mcpServers: [...mcpSel],
         skills: [...skillSel],
         terminalMode,
+        permissionMode,
       });
       setToolSel(cfg.tools === null ? null : new Set(cfg.tools));
       setTerminalMode(cfg.terminalMode ?? "off");
+      setPermissionMode(cfg.permissionMode ?? "ask");
       setSaved(true);
       setTimeout(() => setSaved(false), 1600);
     } catch {
@@ -167,6 +172,40 @@ export function AgentConfigPane({ agentId }: { agentId: string }) {
           {!allowUnsandboxed ? (
             <p className="cfg-hint">Unsandboxed mode is disabled on this server (set <code>TERMINAL_ALLOW_UNSANDBOXED=1</code> to permit it).</p>
           ) : null}
+        </div>
+
+        <div className="cfg-sec" data-od-id="cfg-execution">
+          <div className="cfg-head">
+            <h3>Execution</h3>
+          </div>
+          <p className="cfg-hint">
+            The <b>default</b> tool-execution policy for this agent&apos;s sessions. A session can override it from the
+            console header; both controls write the same session state, so there is one source of truth per session.
+          </p>
+          <div className="cfg-modes" role="radiogroup" aria-label="Default permission mode">
+            {(
+              [
+                ["ask", "Ask", "Require approval before protected tool actions."],
+                ["bypass", "Bypass", "Run protected actions without the interactive approval gate."],
+              ] as [PermissionMode, string, string][]
+            ).map(([mode, label, hint]) => (
+              <button
+                type="button"
+                key={mode}
+                role="radio"
+                aria-checked={permissionMode === mode}
+                className={`cfg-mode ${permissionMode === mode ? "is-on" : ""} ${mode === "bypass" ? "is-warn" : ""}`}
+                title={hint}
+                onClick={() => {
+                  setPermissionMode(mode);
+                  setSaved(false);
+                }}
+              >
+                <span className="cm-label">{label}</span>
+                <span className="cm-hint">{hint}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="cfg-sec">

@@ -14,6 +14,8 @@ export const sessions = sqliteTable(
     title: text("title").notNull().default("New chat"),
     /** per-session model override; null = server default / auto-detect */
     model: text("model"),
+    /** per-session tool-execution policy; null = inherit the agent's default */
+    permissionMode: text("permission_mode", { enum: ["ask", "bypass"] }),
     pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     createdAt: integer("created_at").notNull(),
@@ -35,6 +37,8 @@ export const messages = sqliteTable(
     content: text("content").notNull().default(""),
     /** JSON array of graph-node titles cited via [[wikilinks]] */
     links: text("links"),
+    /** JSON array of the turn's recorded SSE envelopes, for trace replay */
+    events: text("events"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [index("messages_session_idx").on(t.sessionId, t.seq)],
@@ -81,6 +85,8 @@ export const agentConfigs = sqliteTable("agent_configs", {
   mcpServers: text("mcp_servers"),
   /** terminal access: "off" (default) | "sandbox" | "unsandboxed" */
   terminalMode: text("terminal_mode", { enum: ["off", "sandbox", "unsandboxed"] }).notNull().default("off"),
+  /** default tool-execution policy for this agent's sessions: "ask" | "bypass" */
+  permissionMode: text("permission_mode", { enum: ["ask", "bypass"] }).notNull().default("ask"),
   updatedAt: integer("updated_at").notNull(),
 });
 

@@ -1,13 +1,26 @@
 import { LlmError } from "./llm-client";
+import type { ToolStreamEvent, PermissionDecision, PermissionMode } from "@dashboard/shared";
 
-/** A tool invocation event surfaced mid-stream. */
-export interface ToolStreamEvent {
-  type: "tool";
-  phase: "start" | "end";
-  name: string;
-  args?: Record<string, unknown>;
-  result?: string;
-  error?: boolean;
+/** A tool invocation event surfaced mid-stream (shared with the trace model). */
+export type { ToolStreamEvent };
+
+/** A protected tool's policy decision, surfaced mid-stream (the audit record). */
+export interface PermissionEvent {
+  type: "permission";
+  tool: string;
+  mode: PermissionMode;
+  decision: PermissionDecision;
+  /** "mode-change" when the decision came from a permission-mode switch, not an
+   *  operator approval — the timeline says so and never reads it as consent. */
+  reason?: "mode-change";
+}
+
+/** The session's tool-execution policy changed mid-run (an ASK→BYPASS switch). */
+export interface ModeEvent {
+  type: "mode";
+  from: PermissionMode;
+  to: PermissionMode;
+  message?: string;
 }
 
 /** A run paused for the operator's approval before running a tool. */
@@ -19,6 +32,11 @@ export interface InterruptEvent {
   tool: string | null;
   args: Record<string, unknown>;
   message: string;
+  /** the policy the paused run was asked under (always "ask" when an interrupt fires) */
+  mode: PermissionMode;
+  /** set once a mode switch has auto-resolved this pause: recorded history, but
+   *  a re-attach must not re-raise its card */
+  superseded?: boolean;
 }
 
 export interface StreamHandlers {
@@ -28,6 +46,10 @@ export interface StreamHandlers {
   onReasoning?: (text: string) => void;
   /** a tool started or finished (only when tools are enabled) */
   onTool?: (event: ToolStreamEvent) => void;
+  /** a protected tool's policy decision (bypassed / pending) — the audit trail */
+  onPermission?: (event: PermissionEvent) => void;
+  /** the session's tool-execution policy changed mid-run */
+  onMode?: (event: ModeEvent) => void;
   /** a non-fatal notice from the server (e.g. an unsandboxed-run warning) */
   onWarning?: (message: string) => void;
   /** the run paused awaiting approval; resume with `{ resume: { decision } }` */
@@ -47,6 +69,12 @@ interface StreamEnvelope {
   error?: boolean;
   id?: string | null;
   tool?: string | null;
+  mode?: string;
+  decision?: string;
+  from?: string;
+  to?: string;
+  reason?: string;
+  superseded?: boolean;
 }
 
 /**
@@ -94,6 +122,28 @@ async function consumeStream(body: ReadableStream<Uint8Array>, handlers: StreamH
           });
         } else if (ev.type === "warning" && typeof ev.message === "string") {
           handlers.onWarning?.(ev.message);
+        } else if (ev.type === "permission" && typeof ev.tool === "string") {
+          const mode = ev.mode === "bypass" ? "bypass" : "ask";
+          const decision =
+            ev.decision === "bypassed" || ev.decision === "approved" || ev.decision === "rejected" || ev.decision === "denied"
+              ? ev.decision
+              : mode === "bypass"
+                ? "bypassed"
+                : "pending";
+          handlers.onPermission?.({
+            type: "permission",
+            tool: ev.tool,
+            mode,
+            decision,
+            reason: ev.reason === "mode-change" ? "mode-change" : undefined,
+          });
+        } else if (ev.type === "mode") {
+          handlers.onMode?.({
+            type: "mode",
+            from: ev.from === "bypass" ? "bypass" : "ask",
+            to: ev.to === "bypass" ? "bypass" : "ask",
+            message: typeof ev.message === "string" ? ev.message : undefined,
+          });
         } else if (ev.type === "interrupt") {
           handlers.onInterrupt?.({
             type: "interrupt",
@@ -101,6 +151,8 @@ async function consumeStream(body: ReadableStream<Uint8Array>, handlers: StreamH
             tool: ev.tool ?? null,
             args: ev.args ?? {},
             message: typeof ev.message === "string" ? ev.message : "Approval required.",
+            mode: ev.mode === "bypass" ? "bypass" : "ask",
+            superseded: ev.superseded === true,
           });
         } else if (ev.type === "error") {
           throw new LlmError("http", typeof ev.message === "string" ? ev.message : "Stream error", 1);
@@ -129,7 +181,29 @@ export async function streamChatRequest<TBody>(path: string, body: TBody, handle
     }
     throw new LlmError("network", `Network error: ${String(err)}`, 1);
   }
+  await consumeResponse(res, handlers);
+}
 
+/**
+ * GET a streaming route and dispatch its envelopes — used to (re)attach to a
+ * run that is already in flight. Same envelope protocol as the POST path, so a
+ * reconnect replays the run from the start and follows it live.
+ */
+export async function streamAttachRequest(path: string, handlers: StreamHandlers): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(path, { method: "GET", signal: handlers.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new LlmError("aborted", "Request cancelled", 1);
+    }
+    throw new LlmError("network", `Network error: ${String(err)}`, 1);
+  }
+  await consumeResponse(res, handlers);
+}
+
+/** Read a streaming response's envelopes, mapping failures to {@link LlmError}. */
+async function consumeResponse(res: Response, handlers: StreamHandlers): Promise<void> {
   if (!res.ok) {
     let message = `Request failed with HTTP ${res.status}`;
     try {

@@ -116,6 +116,60 @@ export const TOOL_CATALOG: ToolInfo[] = [
     enabledByDefault: false,
   },
   {
+    name: "knowledge_get",
+    description:
+      "Read one node from the knowledge graph by its ID/slug (e.g. \"mev\"). Returns its " +
+      "metadata and relationships; pass with_body to include the full note text. The graph is " +
+      "the Markdown vault; this is the lifecycle-aware read of it.",
+    enabledByDefault: true,
+  },
+  {
+    name: "knowledge_relevant",
+    description:
+      "Retrieve the knowledge-graph nodes relevant to a task, with source, confidence, " +
+      "verification status, relationships and last-updated time. Use it before researching a " +
+      "topic so you reuse what the graph already knows instead of rediscovering it.",
+    enabledByDefault: true,
+  },
+  {
+    name: "knowledge_health",
+    description:
+      "Report the knowledge graph's health: node/relationship counts, verified vs unverified " +
+      "notes, conflicts, open unknowns, broken links and orphans.",
+    enabledByDefault: true,
+  },
+  {
+    name: "knowledge_upsert",
+    description:
+      "Integrate a durable fact into the knowledge graph — dedup, conflict detection, then " +
+      "create or enrich the right Markdown note (never blindly appends). Off by default; enable " +
+      "it on agents that should accumulate knowledge. Writes to the operator's vault.",
+    enabledByDefault: false,
+  },
+  {
+    name: "knowledge_relate",
+    description:
+      "Add a typed relationship between two knowledge nodes and its reciprocal (builds-on, " +
+      "enables, related, depends_on, part_of, caused_by, implements, supports, contradicts, " +
+      "supersedes, derived_from). Off by default; writes to the operator's vault.",
+    enabledByDefault: false,
+  },
+  {
+    name: "knowledge_record",
+    description:
+      "Record a knowledge lifecycle event on a node: attach evidence, verify, log a conflict, " +
+      "open an unknown, or resolve one (select via `kind`). Off by default; writes to the " +
+      "operator's vault.",
+    enabledByDefault: false,
+  },
+  {
+    name: "knowledge_supersede",
+    description:
+      "Mark a knowledge node superseded by a newer one, preserving the old note for history. " +
+      "Off by default; writes to the operator's vault.",
+    enabledByDefault: false,
+  },
+  {
     name: "run_command",
     description:
       "Run a shell command and return its output. Whether this executes sandboxed or with full access is fixed by the operator's configuration for this agent.",

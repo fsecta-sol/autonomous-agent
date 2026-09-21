@@ -59,46 +59,6 @@ export async function fetchSources(): Promise<KnowledgeSource[]> {
   ];
 }
 
-export interface ResearchRequest {
-  thought: string;
-  depth: "quick" | "standard" | "deep";
-}
-
-export interface ResearchResponse {
-  summary: string;
-  connections: string[];
-  layer: string | null;
-}
-
-/**
- * Runs a research thought through the server's LLM proxy. When the server has
- * no LLM key configured it answers 501; we surface that as a status-less
- * "no connection" error so callers fall back to the local vault matcher.
- */
-export async function runResearch(req: ResearchRequest, signal?: AbortSignal): Promise<ResearchResponse> {
-  let res: Response;
-  try {
-    res = await fetch("/api/research", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req),
-      signal,
-    });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new LlmError("aborted", "Request cancelled", 1);
-    }
-    throw new LlmError("network", `Network error: ${String(err)}`, 1);
-  }
-  if (res.status === 501) {
-    throw new LlmError("http", "No AI connection configured. Add one in Settings → AI connection.", 1);
-  }
-  if (!res.ok) {
-    throw new LlmError("http", `Request failed with HTTP ${res.status}`, 1, res.status);
-  }
-  return (await res.json()) as ResearchResponse;
-}
-
 /** Only the model override is kept client-side now — the key lives on the server. */
 export interface AgentConnection {
   model: string;
@@ -163,8 +123,10 @@ export interface StreamChatRequest {
   /** the chat session; the server uses it as the durable thread id and reads
    *  its own persisted transcript from it */
   sessionId?: string;
-  /** answer a paused run's approval interrupt instead of sending a new turn */
-  resume?: { id?: string; decision: "approve" | "deny" };
+  /** answer a paused run's approval interrupt instead of sending a new turn.
+   *  `bypass` resolves the pending request under the session's current policy —
+   *  the backend re-resolves the mode, and proceeds only when it is `bypass`. */
+  resume?: { id?: string; decision: "approve" | "deny" | "bypass" };
   /** ask the model to work through the problem step by step */
   reasoning?: boolean;
   /** run a deeper, source-seeking pass before answering */
@@ -288,6 +250,9 @@ export async function deleteAgentRecord(id: string): Promise<void> {
 
 export type TerminalMode = "off" | "sandbox" | "unsandboxed";
 
+/** Tool-execution policy for protected actions (see the shared model). */
+export type PermissionMode = "ask" | "bypass";
+
 export interface AgentConfig {
   /** null = server defaults; a list = explicit builtin tool names */
   tools: string[] | null;
@@ -295,6 +260,8 @@ export interface AgentConfig {
   mcpServers: string[];
   /** terminal access level for this agent */
   terminalMode: TerminalMode;
+  /** default tool-execution policy for this agent's sessions */
+  permissionMode: PermissionMode;
 }
 
 export async function getAgentConfig(agentId: string): Promise<AgentConfig> {
@@ -407,6 +374,8 @@ export interface ChatSession {
   agentId: string;
   title: string;
   model: string | null;
+  /** per-session tool-execution policy; null = inherit the agent's default */
+  permissionMode: PermissionMode | null;
   pinned: boolean;
   archived: boolean;
   createdAt: number;
@@ -468,7 +437,15 @@ export async function getChat(id: string): Promise<ChatSessionDetail> {
 /** A pending approval on a session's run, if it is paused. */
 export interface ChatRunState {
   paused: boolean;
-  interrupt: { id: string | null; tool: string | null; args: Record<string, unknown>; message: string } | null;
+  interrupt: {
+    id: string | null;
+    tool: string | null;
+    args: Record<string, unknown>;
+    message: string;
+    /** the policy the paused run was asked under — reconstructed from the
+     *  checkpoint, so it reflects the historical mode, not the session's today */
+    mode: PermissionMode;
+  } | null;
 }
 
 /** Whether this session's run is paused awaiting tool approval. */
@@ -545,7 +522,14 @@ export async function appendChatMessage(
 
 export async function updateChat(
   id: string,
-  patch: { title?: string; pinned?: boolean; archived?: boolean; model?: string | null },
+  patch: {
+    title?: string;
+    pinned?: boolean;
+    archived?: boolean;
+    model?: string | null;
+    /** per-session tool-execution policy; null clears the override (inherit) */
+    permissionMode?: PermissionMode | null;
+  },
 ): Promise<ChatSessionDetail> {
   const res = await fetch(`/api/chats/${id}`, {
     method: "PATCH",

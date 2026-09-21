@@ -6,6 +6,7 @@ from langchain_core.tools import BaseTool
 
 from .builtin import BUILTIN_TOOLS
 from .fetch_url import fetch_url
+from .knowledge import KNOWLEDGE_TOOLS
 from .memory import make_memory_tools
 from .remote import REMOTE_TOOLS
 from .terminal import make_run_command
@@ -14,6 +15,7 @@ from .vault import vault_links, vault_list, vault_read, vault_search
 STATIC_TOOLS: dict[str, BaseTool] = {
     **BUILTIN_TOOLS,
     **REMOTE_TOOLS,
+    **KNOWLEDGE_TOOLS,
     "fetch_url": fetch_url,
     "vault_search": vault_search,
     "vault_read": vault_read,
@@ -24,16 +26,24 @@ STATIC_TOOLS: dict[str, BaseTool] = {
 MEMORY_TOOL_NAMES = {"memory_save", "memory_search", "memory_forget"}
 
 
-def build_tools(names: list[str], terminal_mode: str, allow_unsandboxed: bool, agent_id: str = "") -> list[BaseTool]:
+def build_tools(
+    names: list[str],
+    terminal_mode: str,
+    allow_unsandboxed: bool,
+    agent_id: str = "",
+    permission_mode: str = "ask",
+) -> list[BaseTool]:
     """Resolve the builtin tools for a run. `run_command` is added only when the
     agent's terminal mode is not "off"; the memory tools are built per agent so
-    they scope to that agent's namespace."""
+    they scope to that agent's namespace. `permission_mode` (ask/bypass) is the
+    run's frozen tool-execution policy, handed to `run_command` so its approval
+    gate is a real backend decision rather than a UI toggle."""
     memory = make_memory_tools(agent_id) if MEMORY_TOOL_NAMES & set(names) else {}
     tools: list[BaseTool] = []
     for name in names:
         if name == "run_command":
             if terminal_mode != "off":
-                tools.append(make_run_command(terminal_mode, allow_unsandboxed, agent_id))
+                tools.append(make_run_command(terminal_mode, allow_unsandboxed, agent_id, permission_mode))
             continue
         if name in memory:
             tools.append(memory[name])

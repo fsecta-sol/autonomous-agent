@@ -1,13 +1,16 @@
-import { and, desc, eq, asc, like, sql } from "drizzle-orm";
+import { and, desc, eq, asc, gt, gte, inArray, like, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { getDb } from "./index";
 import { sessions, messages, type SessionRow, type MessageRow } from "./schema";
+import type { PermissionMode } from "@dashboard/shared";
 
 export interface ChatMessage {
   id: string;
   role: "system" | "user" | "assistant";
   content: string;
   links: string[] | null;
+  /** recorded SSE envelopes for this turn, for the client to rebuild the trace */
+  events: unknown[] | null;
   seq: number;
   createdAt: number;
 }
@@ -17,6 +20,8 @@ export interface SessionSummary {
   agentId: string;
   title: string;
   model: string | null;
+  /** per-session tool-execution policy; null = inherit the agent's default */
+  permissionMode: PermissionMode | null;
   pinned: boolean;
   archived: boolean;
   createdAt: number;
@@ -47,7 +52,16 @@ function toMessage(row: MessageRow): ChatMessage {
       /* malformed — treat as no links */
     }
   }
-  return { id: row.id, role: row.role, content: row.content, links, seq: row.seq, createdAt: row.createdAt };
+  let events: unknown[] | null = null;
+  if (row.events) {
+    try {
+      const parsed = JSON.parse(row.events);
+      if (Array.isArray(parsed)) events = parsed;
+    } catch {
+      /* malformed — treat as no events */
+    }
+  }
+  return { id: row.id, role: row.role, content: row.content, links, events, seq: row.seq, createdAt: row.createdAt };
 }
 
 function toSummary(row: SessionRow, messageCount: number): SessionSummary {
@@ -56,6 +70,7 @@ function toSummary(row: SessionRow, messageCount: number): SessionSummary {
     agentId: row.agentId,
     title: row.title,
     model: row.model,
+    permissionMode: row.permissionMode ?? null,
     pinned: row.pinned,
     archived: row.archived,
     createdAt: row.createdAt,
@@ -121,7 +136,14 @@ export function createSession(input: { agentId?: string; title?: string; model?:
 
 export function updateSession(
   id: string,
-  patch: { title?: string; model?: string | null; pinned?: boolean; archived?: boolean },
+  patch: {
+    title?: string;
+    model?: string | null;
+    /** per-session tool-execution policy; null = clear the override (inherit) */
+    permissionMode?: PermissionMode | null;
+    pinned?: boolean;
+    archived?: boolean;
+  },
 ): SessionDetail | null {
   const db = getDb();
   const existing = db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, id)).get();
@@ -129,6 +151,7 @@ export function updateSession(
   const values: Partial<SessionRow> = { updatedAt: now() };
   if (patch.title !== undefined) values.title = patch.title.trim() || "New chat";
   if (patch.model !== undefined) values.model = patch.model;
+  if (patch.permissionMode !== undefined) values.permissionMode = patch.permissionMode;
   if (patch.pinned !== undefined) values.pinned = patch.pinned;
   if (patch.archived !== undefined) values.archived = patch.archived;
   db.update(sessions).set(values).where(eq(sessions.id, id)).run();
@@ -142,12 +165,33 @@ export function deleteSession(id: string): boolean {
 }
 
 /**
+ * Delete many sessions in one statement. Messages/checkpoints cascade from the
+ * schema, so this is the whole removal. Returns the ids that actually existed —
+ * an id already gone is silently absent from the result, so a caller can report
+ * a truthful "deleted N of M" without a partial failure.
+ */
+export function deleteSessions(ids: string[]): string[] {
+  const clean = [...new Set(ids.filter((x) => typeof x === "string" && x.length > 0))];
+  if (!clean.length) return [];
+  const db = getDb();
+  const existing = db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(inArray(sessions.id, clean))
+    .all()
+    .map((r) => r.id);
+  if (!existing.length) return [];
+  db.delete(sessions).where(inArray(sessions.id, existing)).run();
+  return existing;
+}
+
+/**
  * Append a turn. `seq` continues the session's existing order; the session's
  * updatedAt is bumped so it floats to the top of the list.
  */
 export function appendMessage(
   sessionId: string,
-  msg: { role: ChatMessage["role"]; content: string; links?: string[] | null; id?: string },
+  msg: { role: ChatMessage["role"]; content: string; links?: string[] | null; events?: string | null; id?: string },
 ): ChatMessage | null {
   const db = getDb();
   const exists = db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, sessionId)).get();
@@ -170,11 +214,82 @@ export function appendMessage(
       role: msg.role,
       content: msg.content,
       links: msg.links && msg.links.length ? JSON.stringify(msg.links) : null,
+      events: msg.events ?? null,
       createdAt: t,
     })
     .run();
   db.update(sessions).set({ updatedAt: t }).where(eq(sessions.id, sessionId)).run();
-  return { id, role: msg.role, content: msg.content, links: msg.links ?? null, seq, createdAt: t };
+  return toMessage({
+    id,
+    sessionId,
+    seq,
+    role: msg.role,
+    content: msg.content,
+    links: msg.links && msg.links.length ? JSON.stringify(msg.links) : null,
+    events: msg.events ?? null,
+    createdAt: t,
+  });
+}
+
+/**
+ * Recent assistant turns across every session, oldest first, each with the
+ * session's agent id and its recorded event log. Telemetry folds these into
+ * per-agent throughput, error rate and latency — the same rows the UI replays.
+ */
+export interface RecentTurn {
+  agentId: string;
+  sessionId: string;
+  content: string;
+  events: unknown[] | null;
+  createdAt: number;
+}
+
+export function recentAssistantTurns(sinceMs: number, limit = 2000): RecentTurn[] {
+  const db = getDb();
+  const rows = db
+    .select({
+      agentId: sessions.agentId,
+      sessionId: messages.sessionId,
+      content: messages.content,
+      events: messages.events,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .innerJoin(sessions, eq(messages.sessionId, sessions.id))
+    .where(and(eq(messages.role, "assistant"), gte(messages.createdAt, sinceMs)))
+    .orderBy(desc(messages.createdAt))
+    .limit(limit)
+    .all();
+  const parsed = rows.map((r) => {
+    let events: unknown[] | null = null;
+    if (r.events) {
+      try {
+        const p = JSON.parse(r.events);
+        if (Array.isArray(p)) events = p;
+      } catch {
+        /* malformed — treated as no log */
+      }
+    }
+    return { agentId: r.agentId, sessionId: r.sessionId, content: r.content, events, createdAt: r.createdAt };
+  });
+  // newest-first from SQL, oldest-first for the caller
+  return parsed.reverse();
+}
+
+/**
+ * Map a set of session ids to the agent each belongs to ("" = unassigned).
+ * Telemetry uses this to attribute an in-flight run to its agent without
+ * relying on the run having already persisted a turn.
+ */
+export function sessionAgentMap(ids: string[]): Map<string, string> {
+  if (!ids.length) return new Map();
+  const db = getDb();
+  const rows = db
+    .select({ id: sessions.id, agentId: sessions.agentId })
+    .from(sessions)
+    .where(inArray(sessions.id, ids))
+    .all();
+  return new Map(rows.map((r) => [r.id, r.agentId]));
 }
 
 /** Derive a short title from the first user message (no LLM call needed). */
@@ -182,4 +297,36 @@ export function titleFromText(text: string): string {
   const clean = text.replace(/\s+/g, " ").replace(/^[-*\d.\s]+/, "").trim();
   if (!clean) return "New chat";
   return clean.length > 60 ? clean.slice(0, 57).trimEnd() + "…" : clean;
+}
+
+/**
+ * Trim a session's transcript to end after `seq` (inclusive) — the anchor a
+ * regenerate or edit-and-resend rewinds to. Every message with a higher seq is
+ * dropped, so the next run re-seeds the model from exactly this tail. Returns
+ * the session as it now stands. A `seq` below the session's first message
+ * clears every message, which is a valid (empty) rewind.
+ */
+export function rewindSession(sessionId: string, seq: number): SessionDetail | null {
+  const db = getDb();
+  const exists = db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, sessionId)).get();
+  if (!exists) return null;
+  db.delete(messages)
+    .where(and(eq(messages.sessionId, sessionId), gt(messages.seq, seq)))
+    .run();
+  db.update(sessions).set({ updatedAt: now() }).where(eq(sessions.id, sessionId)).run();
+  return getSession(sessionId);
+}
+
+/**
+ * Rewrite one persisted turn's content in place (used by edit-and-resend, which
+ * replaces the user turn before re-running). No-op when the row is not found.
+ */
+export function updateMessageContent(sessionId: string, seq: number, content: string): boolean {
+  const db = getDb();
+  const res = db
+    .update(messages)
+    .set({ content })
+    .where(and(eq(messages.sessionId, sessionId), eq(messages.seq, seq)))
+    .run();
+  return res.changes > 0;
 }

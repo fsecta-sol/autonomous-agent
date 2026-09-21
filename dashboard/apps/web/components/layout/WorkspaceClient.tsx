@@ -10,6 +10,7 @@ import { ActivityView } from "@/components/activity/ActivityView";
 import { ResearchView } from "@/components/research/ResearchView";
 import { SwarmView } from "@/components/swarm/SwarmView";
 import { OrchestrationView } from "@/components/orchestration/OrchestrationView";
+import { SchedulerView } from "@/components/scheduler/SchedulerView";
 import { ProfileView } from "@/components/settings/ProfileView";
 import { SettingsView } from "@/components/settings/SettingsView";
 
@@ -64,6 +65,7 @@ function ViewStack() {
       {view === "research" ? <ResearchView /> : null}
       {view === "swarm" ? <SwarmView /> : null}
       {view === "orchestration" ? <OrchestrationView /> : null}
+      {view === "scheduler" ? <SchedulerView /> : null}
       {view === "profile" ? <ProfileView /> : null}
       {view === "settings" ? <SettingsView /> : null}
     </>

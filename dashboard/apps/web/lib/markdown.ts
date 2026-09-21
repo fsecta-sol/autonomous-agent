@@ -11,6 +11,9 @@ export interface MarkdownOptions {
   /** allow raw `<div>`/`<table>` passthrough. Defaults OFF; opt in only for
    *  app-authored content you trust, never for LLM or user text. */
   allowRawHtml?: boolean;
+  /** wrap fenced code in a head bar carrying the language and a Copy button
+   *  (the chat composer's affordance). Defaults OFF; stays off for the reader. */
+  codeCopy?: boolean;
 }
 
 /**
@@ -20,6 +23,7 @@ export interface MarkdownOptions {
  */
 export function renderMarkdown(src: string, opts: MarkdownOptions = {}): string {
   const allowRawHtml = opts.allowRawHtml === true;
+  const codeCopy = opts.codeCopy === true;
   const wiki = opts.wiki ?? ((label: string) => `<span class="rd-wiki">${label}</span>`);
   const lines = src.split("\n");
   let html = "";
@@ -33,22 +37,52 @@ export function renderMarkdown(src: string, opts: MarkdownOptions = {}): string 
   };
   let inFence = false;
   let fenceBuf: string[] = [];
+  let fenceLang = "";
   const flushFence = () => {
     if (inFence) {
-      html += `<pre><code>${esc(fenceBuf.join("\n"))}</code></pre>\n`;
+      const code = esc(fenceBuf.join("\n"));
+      if (codeCopy) {
+        const lang = esc(fenceLang) || "code";
+        html +=
+          `<div class="md-code"><div class="md-code-head">` +
+          `<span class="md-code-lang">${lang}</span>` +
+          `<button type="button" class="md-code-copy" aria-label="Copy code">Copy</button>` +
+          `</div><pre><code>${code}</code></pre></div>\n`;
+      } else {
+        html += `<pre><code>${code}</code></pre>\n`;
+      }
       fenceBuf = [];
+      fenceLang = "";
       inFence = false;
     }
   };
   const inline = (t: string): string => {
-    let s = esc(t);
-    s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
-    s = s.replace(/\[\[(.+?)\]\]/g, (_full, label: string) => wiki(label));
-    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    // italic runs after bold so `**x**` is already consumed; the content must
-    // be space-tight (`*x*` not `5 * 3`) so a stray asterisk can't italicize
-    s = s.replace(/\*([^\s*](?:[^*]*[^\s*])?)\*/g, "<em>$1</em>");
-    return s;
+    // Escape first, then process in code-span and non-code segments. A `code`
+    // span is emitted verbatim, so a `**`, a `[[link]]` or a bare URL inside it
+    // is never re-processed as markup (and never autolinked).
+    const renderText = (seg: string): string => {
+      // bare URLs → links (opened in a new tab; LLM/user text is untrusted)
+      let s = seg.replace(/https?:\/\/[^\s<]+/g, (url) => {
+        const trail = url.match(/[.,;:!?)]+$/);
+        const clean = trail ? url.slice(0, -trail[0].length) : url;
+        const tail = trail ? trail[0] : "";
+        return `<a href="${clean}" target="_blank" rel="noopener noreferrer">${clean}</a>${tail}`;
+      });
+      s = s.replace(/\[\[(.+?)\]\]/g, (_full, label: string) => wiki(label));
+      s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      // italic runs after bold so `**x**` is already consumed; the content must
+      // be space-tight (`*x*` not `5 * 3`) so a stray asterisk can't italicize
+      s = s.replace(/\*([^\s*](?:[^*]*[^\s*])?)\*/g, "<em>$1</em>");
+      return s;
+    };
+    return esc(t)
+      .split(/(`[^`]+`)/g)
+      .map((seg) =>
+        seg.length > 1 && seg[0] === "`" && seg[seg.length - 1] === "`"
+          ? `<code>${seg.slice(1, -1)}</code>`
+          : renderText(seg),
+      )
+      .join("");
   };
   // allow a small allowlist of hand-authored analysis components inside markdown
   const rawWiki = (t: string): string => {
@@ -68,6 +102,7 @@ export function renderMarkdown(src: string, opts: MarkdownOptions = {}): string 
     if (line.startsWith("```")) {
       closeList();
       inFence = true;
+      fenceLang = line.slice(3).trim();
       i++;
       continue;
     }

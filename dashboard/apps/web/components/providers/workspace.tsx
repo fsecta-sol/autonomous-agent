@@ -25,6 +25,7 @@ export type ViewName =
   | "research"
   | "swarm"
   | "orchestration"
+  | "scheduler"
   | "profile"
   | "settings";
 
@@ -83,6 +84,12 @@ interface WorkspaceValue {
   openAgent: (id: string) => void;
   closeAgent: () => void;
 
+  /** the research run the Research view has open, if any */
+  researchRunId: string | null;
+  /** open a research run's detail from anywhere (e.g. the Scheduler) */
+  openRunInResearch: (id: string) => void;
+  closeResearchRun: () => void;
+
   graphFocusMode: boolean;
   setGraphFocusMode: (v: boolean) => void;
 }
@@ -103,6 +110,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [focusRequest, setFocusRequest] = useState<{ title: string; nonce: number } | null>(null);
   const [reader, setReader] = useState<ReaderDoc | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [researchRunId, setResearchRunId] = useState<string | null>(null);
   const [graphFocusMode, setGraphFocusMode] = useState(false);
 
   const loadToken = useRef(0);
@@ -189,7 +197,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setViewState(v);
     if (v !== "graph") setReader(null);
     if (v !== "swarm") setSelectedAgentId(null);
+    if (v !== "research") setResearchRunId(null);
   }, []);
+
+  const openRunInResearch = useCallback((id: string) => {
+    setViewState("research");
+    setResearchRunId(id);
+  }, []);
+  const closeResearchRun = useCallback(() => setResearchRunId(null), []);
 
   const registerEngine = useCallback((e: GraphEngine | null) => {
     setEngine(e);
@@ -242,6 +257,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       selectedAgentId,
       openAgent,
       closeAgent,
+      researchRunId,
+      openRunInResearch,
+      closeResearchRun,
       graphFocusMode,
       setGraphFocusMode,
     }),
@@ -274,6 +292,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       selectedAgentId,
       openAgent,
       closeAgent,
+      researchRunId,
+      openRunInResearch,
+      closeResearchRun,
       graphFocusMode,
     ],
   );

@@ -31,6 +31,7 @@ const MAIN: Omit<NavEntry, "icon">[] = [
   { view: "research", label: "Research" },
   { view: "swarm", label: "Swarm" },
   { view: "orchestration", label: "Orchestration" },
+  { view: "scheduler", label: "Scheduler" },
 ];
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -41,6 +42,7 @@ const ICONS: Record<string, React.ReactNode> = {
   research: <IconResearch />,
   swarm: <IconSwarm />,
   orchestration: <IconOrchestration />,
+  scheduler: <IconClock />,
 };
 
 interface NavRailProps {
@@ -114,7 +116,7 @@ export function NavRail({ collapsed, onToggle, mobileOpen, inboxCount }: NavRail
           </span>
           <span className="nav-label">Appearance</span>
         </button>
-        <button type="button" className="settings-link" onClick={() => setView("settings")}>
+        <button type="button" className="settings-link" onClick={() => setView("scheduler")}>
           <span className="nav-icon">
             <IconClock />
           </span>

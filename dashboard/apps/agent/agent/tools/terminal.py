@@ -56,9 +56,16 @@ def _scrubbed_env(home: str) -> dict[str, str]:
     }
 
 
-def _audit(agent_id: str, mode: str, command: str) -> None:
+def _audit(agent_id: str, mode: str, command: str, permission: str, decision: str) -> None:
     one_line = " ".join(command.split())[:400]
-    log.warning("[terminal] agent=%s mode=%s cmd=%r", agent_id or "?", mode, one_line)
+    log.warning(
+        "[terminal] agent=%s mode=%s permission=%s decision=%s cmd=%r",
+        agent_id or "?",
+        mode,
+        permission,
+        decision,
+        one_line,
+    )
 
 
 def _collect(proc: subprocess.Popen, timeout_s: int) -> dict:
@@ -147,8 +154,18 @@ def _run_unsandboxed(command: str, agent_id: str) -> dict:
         cmd_file.unlink(missing_ok=True)
 
 
-def make_run_command(terminal_mode: str, allow_unsandboxed: bool, agent_id: str = "") -> BaseTool:
-    """Build a run_command tool bound to this run's terminal policy."""
+def make_run_command(
+    terminal_mode: str, allow_unsandboxed: bool, agent_id: str = "", permission_mode: str = "ask"
+) -> BaseTool:
+    """Build a run_command tool bound to this run's terminal policy and
+    tool-execution policy.
+
+    `permission_mode` is the run's frozen ask/bypass policy:
+      ask    — the run pauses for the operator's decision (see interrupt below).
+      bypass — the interactive approval gate is skipped and the command runs.
+               This removes only the interactive step; the mode/sandbox checks
+               above still apply, so bypass is not "anything goes".
+    """
 
     @tool
     def run_command(command: str) -> str:
@@ -166,24 +183,34 @@ def make_run_command(terminal_mode: str, allow_unsandboxed: bool, agent_id: str 
         if mode == "off":
             return dumps({"error": "terminal is disabled for this agent"})
 
-        # Every command is approved by the operator before it runs. This pauses
-        # the whole run; the graph checkpoints, and a later resume returns the
-        # decision here. (The code above is pure, so node replay is harmless.)
-        decision = interrupt(
-            {
-                "tool": "run_command",
-                "args": {"command": cmd, "mode": mode},
-                "message": f"Approve running this command ({mode})?",
-            }
-        )
-        if decision != "approve":
-            return dumps({"error": "command denied by operator", "denied": True})
+        # The permission gate. Under "ask", the whole run pauses for the operator
+        # and a later resume returns the decision here (the graph checkpoints, so
+        # node replay is harmless — the code above is pure). Under "bypass" the
+        # gate is skipped entirely: the command proceeds with no interrupt, and
+        # the audit line records that decision as "bypassed", never "approved".
+        if permission_mode == "bypass":
+            _audit(agent_id, mode, cmd, "bypass", "bypassed")
+        else:
+            decision = interrupt(
+                {
+                    "tool": "run_command",
+                    "args": {"command": cmd, "mode": mode},
+                    "message": f"Approve running this command ({mode})?",
+                    # Persisted with the checkpoint so a reload can report the
+                    # policy the paused run was asked under (see main.py /state).
+                    "permission": "ask",
+                }
+            )
+            if decision != "approve":
+                _audit(agent_id, mode, cmd, "ask", "denied")
+                return dumps({"error": "command denied by operator", "denied": True})
+            _audit(agent_id, mode, cmd, "ask", "approved")
 
-        _audit(agent_id, mode, cmd)
         result = _run_unsandboxed(cmd, agent_id) if mode == "unsandboxed" else _run_sandboxed(cmd, agent_id)
         return dumps(
             {
                 "mode": mode,
+                "permission": permission_mode,
                 "exitCode": result["code"],
                 "timedOut": result["timedOut"],
                 "truncated": result["truncated"],

@@ -261,6 +261,17 @@ export function IconScreen(props: IconProps) {
   );
 }
 
+/** A processor chip — the model/engine glyph. */
+export function IconChip(props: IconProps) {
+  return (
+    <svg {...base} strokeWidth={1.3} {...props}>
+      <rect x="4.5" y="4.5" width="7" height="7" />
+      <rect x="7" y="7" width="2" height="2" fill="currentColor" stroke="none" />
+      <path d="M6.5 1.8v2.7M9.5 1.8v2.7M6.5 11.5v2.7M9.5 11.5v2.7M1.8 6.5h2.7M1.8 9.5h2.7M11.5 6.5h2.7M11.5 9.5h2.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function IconMic(props: IconProps) {
   return (
     <svg viewBox="0 0 16 16" aria-hidden fill="none" stroke="currentColor" strokeWidth={1.3} {...props}>
@@ -282,6 +293,14 @@ export function IconDot(props: IconProps) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden fill="currentColor" {...props}>
       <circle cx="12" cy="12" r="6" />
+    </svg>
+  );
+}
+
+export function IconStop(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden fill="currentColor" {...props}>
+      <rect x="4" y="4" width="8" height="8" />
     </svg>
   );
 }
@@ -310,6 +329,36 @@ export function IconTrash(props: IconProps) {
       <path d="M6.5 4.5V3h3v1.5" />
       <path d="M4.3 4.5l.6 8.2h6.2l.6-8.2" />
       <path d="M6.7 7v3.6M9.3 7v3.6" />
+    </svg>
+  );
+}
+
+export function IconCopy(props: IconProps) {
+  return (
+    <svg {...base} strokeWidth={1.3} {...props}>
+      <rect x="5.6" y="5.6" width="7.9" height="7.9" />
+      <path d="M10.4 5.6V2.5H2.5v7.9h3.1" />
+    </svg>
+  );
+}
+
+export function IconExternalLink(props: IconProps) {
+  return (
+    <svg {...base} strokeWidth={1.3} {...props}>
+      <path d="M7 3.2H3.2v9.6h9.6V9" />
+      <path d="M9.6 2.8h3.6v3.6" />
+      <path d="M13.2 2.8 7.8 8.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconRefresh(props: IconProps) {
+  return (
+    <svg {...base} strokeWidth={1.3} {...props}>
+      <path d="M13.4 7A5.4 5.4 0 0 0 3.4 5.6" strokeLinecap="round" />
+      <path d="M2.6 9A5.4 5.4 0 0 0 12.6 10.4" strokeLinecap="round" />
+      <path d="M13.2 3v4h-4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.8 13v-4h4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

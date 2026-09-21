@@ -6,6 +6,8 @@ Envelopes:
   {"type":"reasoning","text":…}                  a streamed reasoning delta
   {"type":"tool","phase":"start","name":…,"args":{…}}
   {"type":"tool","phase":"end","name":…,"result":"…","error":bool}
+  {"type":"permission","tool":…,"mode":…,"decision":…}  a protected tool's policy decision
+  {"type":"interrupt","tool":…,"args":{…},"mode":"ask"} a run paused for approval
   {"type":"warning","message":…}                 a non-fatal notice
   {"type":"error","message":…}
   {"type":"done"}
@@ -16,6 +18,10 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_core.messages import AIMessage
+
+# Tools whose execution is gated by the run's permission policy. Kept in sync
+# with the backend's catalog (lib/server/permission.ts PROTECTED_TOOLS).
+PROTECTED_TOOLS = frozenset({"run_command"})
 
 
 def frame(obj: dict[str, Any]) -> bytes:
@@ -71,13 +77,21 @@ def _reasoning_from_chunk(chunk: Any) -> str:
     return ""
 
 
-async def run_envelopes(agent: Any, graph_input: Any, config: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
+async def run_envelopes(
+    agent: Any, graph_input: Any, config: dict[str, Any], permission_mode: str = "ask"
+) -> AsyncIterator[dict[str, Any]]:
     """Drive the LangGraph agent and yield our envelope dicts.
 
     Text comes only from the `messages` stream mode; tool start/end come only
     from `updates`, so nothing is double-emitted. Reasoning is best-effort. A
     pause for approval surfaces as an `interrupt` envelope, after which the
     stream ends (the run is checkpointed; a later call resumes it).
+
+    For a protected tool (see PROTECTED_TOOLS) a `permission` envelope is emitted
+    at tool start carrying the run's policy decision. Under `ask` the decision is
+    `pending` (an interrupt follows); under `bypass` it is `bypassed` and the tool
+    runs straight through — this is the audit record that explains why no
+    approval card appeared, and it is never conflated with an approval.
     """
     # tool_call_id → tool name, so a ToolMessage can report which tool finished.
     call_names: dict[str, str] = {}
@@ -102,7 +116,7 @@ async def run_envelopes(agent: Any, graph_input: Any, config: dict[str, Any]) ->
         # {"__interrupt__": (Interrupt(value=…, id=…),)} when a node pauses.
         if INTERRUPT_KEY in (data or {}):
             for intr in data[INTERRUPT_KEY]:
-                yield _interrupt_envelope(intr)
+                yield _interrupt_envelope(intr, permission_mode)
             continue
 
         for update in (data or {}).values():
@@ -115,12 +129,25 @@ async def run_envelopes(agent: Any, graph_input: Any, config: dict[str, Any]) ->
                         args = call.get("args") if isinstance(call, dict) else getattr(call, "args", None)
                         if call_id and name:
                             call_names[call_id] = name
+                        # The tool step is announced first, so the policy decision
+                        # below can attach to it (the timeline then shows "bypassed"
+                        # or "awaiting approval" on the same row as the tool call).
                         yield {
                             "type": "tool",
                             "phase": "start",
                             "name": name or "tool",
                             "args": args if isinstance(args, dict) else {},
                         }
+                        # A protected tool states its policy decision up front, so
+                        # the timeline can show "bypassed" (or "awaiting approval")
+                        # before the tool result — or the interrupt — arrives.
+                        if name in PROTECTED_TOOLS:
+                            yield {
+                                "type": "permission",
+                                "tool": name,
+                                "mode": permission_mode,
+                                "decision": "bypassed" if permission_mode == "bypass" else "pending",
+                            }
                     continue
 
                 call_id = getattr(msg, "tool_call_id", None)
@@ -143,9 +170,11 @@ async def run_envelopes(agent: Any, graph_input: Any, config: dict[str, Any]) ->
 INTERRUPT_KEY = "__interrupt__"
 
 
-def _interrupt_envelope(intr: Any) -> dict[str, Any]:
+def _interrupt_envelope(intr: Any, permission_mode: str = "ask") -> dict[str, Any]:
     """Translate a LangGraph Interrupt into our `interrupt` envelope. The value
-    is whatever the tool passed to `interrupt()` (see tools/terminal.py)."""
+    is whatever the tool passed to `interrupt()` (see tools/terminal.py). The
+    run's permission mode rides along, so the approval card can state the policy
+    it is being asked under."""
     value = getattr(intr, "value", None)
     payload = value if isinstance(value, dict) else {"message": str(value)}
     return {
@@ -154,4 +183,5 @@ def _interrupt_envelope(intr: Any) -> dict[str, Any]:
         "tool": payload.get("tool"),
         "args": payload.get("args", {}),
         "message": payload.get("message", "Approval required."),
+        "mode": permission_mode,
     }
