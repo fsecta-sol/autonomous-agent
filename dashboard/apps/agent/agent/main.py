@@ -65,6 +65,9 @@ async def health() -> dict:
 # leave the stream silent for minutes, and an idle stream gets dropped by an
 # intermediary's timeout on the way to the client. See sse.keepalive().
 KEEPALIVE_INTERVAL_S = 10.0
+# How many durable events a fresh SSE attach replays before going live. A run can
+# far exceed this; we replay the most recent window and emit a truncation marker.
+REPLAY_LIMIT = 2000
 
 
 async def _with_keepalive(source: AsyncIterator[dict], interval: float = KEEPALIVE_INTERVAL_S) -> AsyncIterator[bytes]:
@@ -586,8 +589,15 @@ async def research_stream(run_id: str) -> StreamingResponse:
     async def body():
         q = svc.bus.subscribe(run_id)
         try:
-            # replay the durable log first (so an attach sees history), then live
-            for ev in await svc.store.list_events(run_id):
+            # Replay the durable log first (so an attach sees history), then live.
+            # Replay the most recent window, not the oldest: a run can carry far
+            # more than REPLAY_LIMIT events, and an ASC read with a limit returned
+            # the head and silently dropped the recent tail. When events were
+            # skipped, tell the client explicitly instead of quietly truncating.
+            total = await svc.store.count_events(run_id)
+            if total > REPLAY_LIMIT:
+                yield frame({"research_replay": {"total": total, "sent": REPLAY_LIMIT, "truncated": True}})
+            for ev in await svc.store.tail_events(run_id, limit=REPLAY_LIMIT):
                 yield frame({"research": ev})
             while True:
                 try:

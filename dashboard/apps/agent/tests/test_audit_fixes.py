@@ -403,5 +403,115 @@ class TestStoreTableParsing(StoreTestCase):
                               "objective must be JSON-decoded, not left as a raw string")
 
 
+# ── medium audit items (K2 / S3 / S4 / C3) ───────────────────────────────────
+
+class TestVaultSearchSeesStaging(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="k2-test-"))
+        self.vault = self.tmp / "vault"
+        (self.vault / "03-Areas/concepts").mkdir(parents=True)
+        (self.vault / "03-Areas/concepts/robinhood-chain.md").write_text(
+            "---\nconcept: robinhood-chain\nstatus: active\n---\n\n# Robinhood Chain\nA chain.\n",
+            encoding="utf-8")
+        self.ws = self.tmp / "workspaces" / "run_k2"
+        self._env = os.environ.get("VAULT_ROOT")
+        os.environ["VAULT_ROOT"] = str(self.vault)
+        from agent.knowledge import index as kix
+        from agent.tools import vault_index
+        kix.invalidate(); vault_index.invalidate()
+
+    def tearDown(self):
+        if self._env is None:
+            os.environ.pop("VAULT_ROOT", None)
+        else:
+            os.environ["VAULT_ROOT"] = self._env
+        from agent.knowledge import index as kix
+        from agent.tools import vault_index
+        kix.invalidate(); vault_index.invalidate()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_staged_note_is_searchable(self):
+        """A note a run just created (in staging) must be found by vault_search —
+        before, it was visible to knowledge_* but missing from vault_search, so the
+        two search surfaces disagreed on the same corpus."""
+        from agent.knowledge import vault_store
+        from agent.tools import vault_index
+
+        with vault_store.staging(self.ws):
+            vault_store.write("03-Areas/concepts/b20-x.md",
+                              "---\nconcept: b20-x\nstatus: active\n---\n\n# B20 Precompile\nUnique zzmarker term.\n")
+            vault_index.invalidate()
+            hits = vault_index.search("zzmarker")
+        self.assertTrue(any(h["path"].endswith("b20-x.md") for h in hits),
+                        f"staged note not found by vault_search: {hits}")
+        # the vault copy remains visible too
+        keys = {h["path"] for h in vault_index.search("robinhood")}
+        self.assertTrue(any("robinhood-chain.md" in k for k in keys))
+
+    def test_staged_shadows_vault_in_search(self):
+        from agent.knowledge import vault_store
+        from agent.tools import vault_index
+
+        with vault_store.staging(self.ws):
+            vault_store.write("03-Areas/concepts/robinhood-chain.md",
+                              "---\nconcept: robinhood-chain\nstatus: active\n---\n\n# Robinhood Chain\nSTAGEDONLY term.\n")
+            vault_index.invalidate()
+            hits = vault_index.search("stagedonly")
+        self.assertTrue(hits, "the staged shadow of an existing note must be searched")
+
+
+class TestRunawayGuardPerFire(unittest.TestCase):
+    def test_idle_ticks_do_not_pause(self):
+        """S3: the guard rates fires, so an idle tick (no fire due) must never count
+        as a violation — otherwise a healthy schedule would be paused by ticks."""
+        from agent.research.scheduler.safety import RunawayGuard
+        from tests.test_research_scheduler import _sched, _ms
+
+        g = RunawayGuard(min_interval_s=60, pause_after=3)
+        now = _ms(2026, 9, 17, 10, 0)
+        s = _sched(type="INTERVAL", interval_s=3600, last_run_at=now - 5_000)
+        # 10 idle ticks inside the interval floor, no fire due: must stay OK
+        for _ in range(10):
+            self.assertEqual(g.check(s, now, fire_due=False).action, "OK")
+        # a fire that is actually due too soon still throttles -> pauses
+        self.assertEqual(g.check(s, now, fire_due=True).action, "THROTTLE")
+
+
+class TestExpireOverdueIncludesRetrying(StoreTestCase):
+    async def test_retrying_job_past_deadline_is_expired(self):
+        """S4: a job that failed into RETRYING with a deadline in the past must be
+        expired — it was skipped, so it retried past its deadline without bound."""
+        from agent.research.scheduler import model as S
+        from agent.research.scheduler.scheduler import Scheduler, SchedulerConfig
+        from agent.research.scheduler.timeutil import FakeClock
+
+        store = await self._store()
+        clk = FakeClock(1_700_000_000_000)
+        sch = Scheduler(store, config=SchedulerConfig(), clock=clk)
+        job = S.ScheduledJob(id="j_retry", schedule_id="s", research_run_id="r",
+                             status=S.JOB_RETRYING, created_at=clk.now_ms())
+        job.metadata = {"deadline_ms": clk.now_ms() - 60_000}  # deadline an hour ago
+        await store.save_job(job)
+        await sch._expire_overdue(clk.now_ms())
+        self.assertEqual((await store.get_job("j_retry"))["status"], S.JOB_EXPIRED)
+
+
+class TestTailEvents(StoreTestCase):
+    async def test_tail_returns_recent_not_oldest(self):
+        """C3: replay of a long run must be the *recent* window, oldest-first. The
+        old ASC+limit read returned the head and dropped the recent events."""
+        from agent.research.events import ResearchEvent
+
+        store = await self._store()
+        for i in range(10):
+            await store.record_event(ResearchEvent(id=f"e{i}", run_id="r", type="T", ts=1000 + i))
+        self.assertEqual(await store.count_events("r"), 10)
+        tail = await store.tail_events("r", limit=3)
+        self.assertEqual([e["id"] for e in tail], ["e7", "e8", "e9"], "must be the newest 3, chronological")
+        # the old behaviour (ASC + limit) would have returned e0..e2
+        head = await store.list_events("r", limit=3)
+        self.assertEqual([e["id"] for e in head], ["e0", "e1", "e2"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

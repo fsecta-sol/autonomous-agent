@@ -511,7 +511,14 @@ class Scheduler:
             if sched.is_finished():
                 await self._complete_schedule(sched)
                 continue
-            guard = self.runaway.check(sched, now)
+            trig = trigger_for(sched)
+            nxt = trig.next_occurrence(ctx)
+            due = trig.should_trigger(ctx)
+            # The runaway guard rates *fires*. Only consult it when a fire is
+            # actually due this tick — checking it regardless counted every idle
+            # tick inside the interval floor as a violation and paused healthy
+            # schedules on ticks alone.
+            guard = self.runaway.check(sched, now, fire_due=due)
             if guard.action == GUARD_PAUSE:
                 sched.status = S.SCHED_PAUSED
                 await self.store.save_schedule(sched)
@@ -523,9 +530,7 @@ class Scheduler:
                 self._decisions[sched.id] = S.ScheduleDecision(sched.id, "DEFER", [guard.reason])
                 continue
 
-            trig = trigger_for(sched)
-            nxt = trig.next_occurrence(ctx)
-            if trig.should_trigger(ctx):
+            if due:
                 # Single-flight for a schedule bound to a research run: while one
                 # of its jobs is still pending or running, do not create another.
                 # An INTERVAL schedule re-fires every interval, and the idempotency
@@ -647,7 +652,9 @@ class Scheduler:
     async def _expire_overdue(self, now: int) -> None:
         """Mark jobs past their deadline EXPIRED (spec §29) — never silently stop
         research, only flag the job."""
-        rows = await self.store.list_jobs(status=[S.JOB_READY, S.JOB_SCHEDULED, S.JOB_QUEUED, S.JOB_WAITING])
+        rows = await self.store.list_jobs(status=[
+            S.JOB_READY, S.JOB_SCHEDULED, S.JOB_QUEUED, S.JOB_WAITING, S.JOB_RETRYING, S.JOB_PAUSED,
+        ])
         for r in rows:
             job = S.ScheduledJob.from_row(r)
             deadline = job.metadata.get("deadline_ms") if isinstance(job.metadata, dict) else None

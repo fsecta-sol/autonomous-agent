@@ -59,30 +59,58 @@ def tokenize(text: str) -> list[str]:
     return TOKEN_RE.findall(text.lower())
 
 
+def _roots() -> list[Path]:
+    """Roots the corpus is read from, in shadow priority: the active staging
+    workspace first, then the shared vault. A note a run just created is visible
+    to `knowledge_*` but was missing from `vault_search`; and for a note in both,
+    the staged copy must shadow the vault's — the same read-through contract the
+    Knowledge Manager's index honours. When no run is staging, this is just the
+    vault."""
+    roots: list[Path] = []
+    try:
+        from ..knowledge import vault_store
+
+        stage = vault_store.staging_root()
+    except Exception:  # noqa: BLE001 — staging is optional; never break search
+        stage = None
+    if stage is not None and stage != vault_root():
+        roots.append(stage)
+    roots.append(vault_root())
+    return roots
+
+
 def _walk() -> list[tuple[str, str, float, int]]:
-    """Walk the vault; return (abs, rel, mtime, size) for allowed note files."""
-    root = vault_root()
+    """Walk the vault (+ active staging); return (abs, rel, mtime, size) for
+    allowed note files. A rel present under more than one root is listed once —
+    the *first* root wins, and `_roots` orders staging before the vault, so a
+    staged copy shadows the vault's."""
     out: list[tuple[str, str, float, int]] = []
-    if not root.is_dir():
-        return out
-    stack = [root]
-    while stack:
-        directory = stack.pop()
-        try:
-            entries = list(directory.iterdir())
-        except OSError:
+    seen: set[str] = set()
+    for root in _roots():
+        if not root.is_dir():
             continue
-        for entry in entries:
-            if entry.name in SKIP_DIRS or (entry.name.startswith(".") and entry.is_dir()):
-                continue
+        stack = [root]
+        while stack:
+            directory = stack.pop()
             try:
-                if entry.is_dir():
-                    stack.append(entry)
-                elif entry.is_file() and entry.suffix.lower() in ALLOWED_EXT:
-                    st = entry.stat()
-                    out.append((str(entry), str(entry.relative_to(root)), st.st_mtime, st.st_size))
+                entries = list(directory.iterdir())
             except OSError:
                 continue
+            for entry in entries:
+                if entry.name in SKIP_DIRS or (entry.name.startswith(".") and entry.is_dir()):
+                    continue
+                try:
+                    if entry.is_dir():
+                        stack.append(entry)
+                    elif entry.is_file() and entry.suffix.lower() in ALLOWED_EXT:
+                        rel = str(entry.relative_to(root))
+                        if rel in seen:
+                            continue
+                        seen.add(rel)
+                        st = entry.stat()
+                        out.append((str(entry), rel, st.st_mtime, st.st_size))
+                except OSError:
+                    continue
     return out
 
 

@@ -444,6 +444,12 @@ class ResearchStore:
         rows = await cur.fetchall()
         return [d for d in (self._decode(table, r) for r in rows) if d is not None]
 
+    async def _count(self, table: str, where: str = "", args: tuple = ()) -> int:
+        sql = f"SELECT COUNT(*) FROM {table}" + (f" WHERE {where}" if where else "")
+        cur = await self._conn.execute(sql, args)
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
+
     # ── runs (the State Manager) ──
     async def save_run(self, run: M.ResearchRun) -> None:
         await self._upsert("research_runs", run.to_row(), "id")
@@ -598,6 +604,23 @@ class ResearchStore:
             "SELECT * FROM research_events WHERE run_id=? AND ts>? ORDER BY ts ASC LIMIT ?",
             (run_id, since_ts, limit),
         )
+
+    async def count_events(self, run_id: str) -> int:
+        return await self._count("research_events", "run_id=?", (run_id,))
+
+    async def tail_events(self, run_id: str, *, limit: int) -> list[dict]:
+        """The most recent `limit` events, returned oldest-first (chronological).
+
+        For a stream that attaches to a long run: replaying `list_events` ASC
+        with a limit returns the *oldest* window and silently drops everything
+        after, so a late attacher sees a stale head. Reading the tail keeps the
+        recent history and lets the caller flag what was skipped."""
+        rows = await self._fetchall(
+            "SELECT * FROM research_events WHERE run_id=? ORDER BY ts DESC LIMIT ?",
+            (run_id, limit),
+        )
+        rows.reverse()
+        return rows
 
     # ── evaluations (the Research Evaluator's output) ──
     async def save_evaluation(self, evaluation: Any) -> None:

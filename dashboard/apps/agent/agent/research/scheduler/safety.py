@@ -51,13 +51,21 @@ class RunawayGuard:
         self._fires: dict[str, list[int]] = {}
         self._violations: dict[str, int] = {}
 
-    def check(self, schedule: S.Schedule, now_ms: int) -> GuardDecision:
+    def check(self, schedule: S.Schedule, now_ms: int, *, fire_due: bool = True) -> GuardDecision:
+        """Decide whether this schedule may fire now.
+
+        `fire_due` says whether a fire is actually pending this evaluation. The
+        interval/rate limits only describe *fires*, so they must be judged only
+        when one is pending — otherwise every idle tick inside the interval floor
+        would count as a violation and a healthy schedule would be PAUSEd by ticks
+        alone (the `_fire_triggers` loop calls this for every active schedule on
+        every tick)."""
         fires = self._fires.setdefault(schedule.id, [])
         # drop fires older than an hour
         cutoff = now_ms - 3_600_000
         fires[:] = [t for t in fires if t >= cutoff]
 
-        if schedule.last_run_at is not None:
+        if fire_due and schedule.last_run_at is not None:
             gap_s = (now_ms - schedule.last_run_at) / 1000.0
             if gap_s < self.min_interval_s:
                 self._violations[schedule.id] = self._violations.get(schedule.id, 0) + 1
@@ -65,8 +73,10 @@ class RunawayGuard:
                     return GuardDecision(GUARD_PAUSE, f"fired {gap_s:.1f}s apart {self._violations[schedule.id]}x — schedule paused")
                 return GuardDecision(GUARD_THROTTLE, f"fired {gap_s:.1f}s ago; floor is {self.min_interval_s}s")
 
+        # the hourly cap is a property of *fires* too, but it reads recorded fires
+        # rather than the pending one, so it stays meaningful whenever it is full.
         cap = schedule.max_runs_per_hour or self.max_per_hour
-        if cap and len(fires) >= cap:
+        if fire_due and cap and len(fires) >= cap:
             return GuardDecision(GUARD_CIRCUIT_BREAK, f"{len(fires)} fires in the last hour (cap {cap})")
 
         return GuardDecision(GUARD_OK)
