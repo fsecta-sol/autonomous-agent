@@ -121,7 +121,3 @@ SCHEDULING_POLICY_REGISTRY.register("priority", PriorityPolicy())
 SCHEDULING_POLICY_REGISTRY.register("priority_with_aging", PriorityWithAgingPolicy())
 
 DEFAULT_POLICY = "priority_with_aging"
-
-
-def register_policy(name: str, policy: SchedulingPolicy) -> None:
-    SCHEDULING_POLICY_REGISTRY.register(name, policy)

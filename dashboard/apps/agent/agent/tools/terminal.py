@@ -13,6 +13,7 @@ The mode is fixed server-side; a hostile prompt cannot select it.
 import logging
 import os
 import re
+import signal
 import subprocess
 import tempfile
 import uuid
@@ -75,7 +76,13 @@ def _collect(proc: subprocess.Popen, timeout_s: int) -> dict:
         stdout, stderr = proc.communicate(timeout=timeout_s)
     except subprocess.TimeoutExpired:
         timed_out = True
-        proc.kill()
+        # Kill the whole process *group* (the child was spawned with
+        # start_new_session=True, so it leads its own group): a command that
+        # backgrounds work leaves grandchildren that `proc.kill()` would not reach.
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
         stdout, stderr = proc.communicate()
 
     out = (stdout or b"").decode("utf-8", errors="replace")

@@ -56,7 +56,7 @@ def _promote_workspace(run_id: str, log_) -> dict:
     """Copy a finished run's staged notes into the vault — only notes the vault
     does not already have. Never overwrites or deletes an existing vault note, so
     promotion is additive and safe to repeat. Returns a small summary."""
-    from ..config import vault_root, vault_write_root
+    from ..config import vault_root
 
     ws = _workspace_for(run_id)
     if not ws.is_dir():
@@ -535,7 +535,14 @@ class ResearchLoop:
     async def _stage_analyze_result(self, run: M.ResearchRun) -> None:
         ctx = await self._ctx(run)
         result = await self.deps.store.get_result(run.metadata.get("current_result_id", ""))
-        evaluation = self.deps.analyzer.analyze(result, ctx) if result else M.Evaluation(failed=True)
+        # A missing result is a transient failure (the executor wrote nothing),
+        # not a silent no-op: FAIL_NONE made nextaction read it as a non-transient
+        # failure and CONTINUE, dropping the iteration as if it had succeeded.
+        evaluation = (
+            self.deps.analyzer.analyze(result, ctx)
+            if result
+            else M.Evaluation(failed=True, failure_kind=M.FAIL_TOOL)
+        )
         run.metadata["evaluation"] = evaluation.to_dict()
         it = await self._current_iteration(run)
         if it:
@@ -628,14 +635,24 @@ class ResearchLoop:
 
     async def _stage_decide(self, run: M.ResearchRun) -> None:
         evaluation = M.Evaluation.from_dict(run.metadata.get("evaluation", {}))
-        # attempts on the current question
+        # attempts and failures on the *current question* (not the run as a whole):
+        # `repeated-failure` compares against a per-question cap, so feeding it the
+        # run-wide low-value streak let an unrelated plateau trip it with a reason
+        # that named the wrong question.
         attempts = 0
+        question_failures = 0
         if run.current_candidate_id:
             cand = await self.deps.store.get_candidate(run.current_candidate_id)
             if cand:
                 from .candidates import question_key
 
-                attempts = len(await self.deps.store.find_attempts(run.id, question_key(cand.question)))
+                rows = await self.deps.store.find_attempts(run.id, question_key(cand.question))
+                attempts = len(rows)
+                for r in rows:  # rows are newest-first
+                    if r.get("outcome") == "failed":
+                        question_failures += 1
+                    else:
+                        break
         stop = evaluate_stops(
             StopState(
                 run=run,
@@ -643,7 +660,7 @@ class ResearchLoop:
                 candidate_count=int(run.metadata.get("candidate_count", 0)),
                 coverage=float(run.metadata.get("coverage", 0.0)),
                 open_gaps=int(run.metadata.get("open_gaps", 0)),
-                consecutive_failures=run.progress.low_value_streak if evaluation.failed else 0,
+                consecutive_failures=question_failures,
                 last_evaluation=evaluation,
             )
         )

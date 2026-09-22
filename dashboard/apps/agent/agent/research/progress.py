@@ -29,7 +29,7 @@ class ProgressEvaluator:
 
         created = sum(1 for u in updates if u.get("op") in ("create", "new"))
         enriched = sum(1 for u in updates if u.get("op") in ("update", "interpretation"))
-        verified = sum(1 for u in updates if u.get("op") == "verified")
+        resolved = sum(1 for u in updates if u.get("op") == "resolved")
         unknowns = sum(1 for u in updates if u.get("op") == "unknown")
         relations = sum(1 for u in updates if u.get("op") == "relation")
 
@@ -42,8 +42,10 @@ class ProgressEvaluator:
             progress.conflicts_found += 1
         if evaluation.hypothesis_survived is False:
             progress.hypotheses_rejected += 1
-        # verified nodes count as resolved uncertainties
-        progress.unknowns_resolved += verified
+        # Only a genuine unknown resolution counts. A *verified node* is not a
+        # resolved unknown — it is a confidence signal already implied by
+        # info_gain — so counting it (as before) overstated `unknowns_resolved`.
+        progress.unknowns_resolved += resolved
 
         # diminishing returns: only *durable* graph growth resets the streak —
         # a new node or a new edge. Deliberately excluded: `unknowns` (creating

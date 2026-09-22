@@ -12,7 +12,6 @@ an evaluation round-trips through the SQLite store and the HTTP API unchanged.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
 
 from ..models import new_id, now_ms
 
@@ -360,7 +359,3 @@ class ResearchEvaluation:
 
 def make_evaluation_id() -> str:
     return new_id("eval_")
-
-
-def _unused(_: Any = None) -> None:  # keep Any import meaningful for future fields
-    return None

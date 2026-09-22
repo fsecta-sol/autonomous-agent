@@ -40,7 +40,6 @@ class Weights:
     information_gain: float = 3.0
     objective_relevance: float = 2.0
     uncertainty: float = 1.5
-    dependency_impact: float = 1.0
     confidence_gap: float = 1.0
     novelty: float = 1.2
     cost: float = 1.0
@@ -62,11 +61,6 @@ class WeightedPrioritizer(ResearchPrioritizer):
 
     async def rank(self, candidates: list[M.ResearchCandidate], ctx: ResearchContext) -> list[RankedCandidate]:
         obj_terms = set(ctx.objective.statement.lower().split())
-        # how many candidates depend on each subject (dependency impact)
-        dep_count: dict[str, int] = {}
-        for c in candidates:
-            for d in c.dependencies:
-                dep_count[d] = dep_count.get(d, 0) + 1
         # subjects already attempted (novelty penalty)
         attempted = {a.get("question_norm", "") for a in ctx.recent_attempts}
 
@@ -78,7 +72,6 @@ class WeightedPrioritizer(ResearchPrioritizer):
             overlap = len(obj_terms & set(c.question.lower().split()))
             obj_rel = min(1.0, overlap / 4.0)
             uncertainty = _SEVERITY_SCORE.get("critical" if c.related_conflicts else c.priority_hint, 0.4)
-            dep_impact = min(1.0, dep_count.get(c.question, 0) / 3.0)
             confidence_gap = 1.0 if c.related_conflicts else (0.6 if c.related_unknowns else 0.2)
             from .candidates import question_key
 
@@ -88,7 +81,6 @@ class WeightedPrioritizer(ResearchPrioritizer):
                 "information_gain": self.w.information_gain * gain,
                 "objective_relevance": self.w.objective_relevance * obj_rel,
                 "uncertainty": self.w.uncertainty * uncertainty,
-                "dependency_impact": self.w.dependency_impact * dep_impact,
                 "confidence_gap": self.w.confidence_gap * confidence_gap,
                 "novelty": self.w.novelty * novelty,
                 "cost": -self.w.cost * cost,

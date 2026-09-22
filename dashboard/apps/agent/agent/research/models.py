@@ -74,29 +74,6 @@ STAGES = [
     STAGE_DONE,
 ]
 
-# Next stage in the linear flow. DECIDING_NEXT_ACTION is where the flow branches
-# (continue → GENERATING_CANDIDATES, branch → same, wait → WAITING, stop → DONE);
-# that branching is applied by the loop, not by this static map.
-_NEXT_STAGE = {
-    STAGE_IDLE: STAGE_LOADING_CONTEXT,
-    STAGE_LOADING_CONTEXT: STAGE_ANALYZING_KNOWLEDGE,
-    STAGE_ANALYZING_KNOWLEDGE: STAGE_GENERATING_CANDIDATES,
-    STAGE_GENERATING_CANDIDATES: STAGE_PRIORITIZING,
-    STAGE_PRIORITIZING: STAGE_PLANNING,
-    STAGE_PLANNING: STAGE_EXECUTING,
-    STAGE_EXECUTING: STAGE_COLLECTING_EVIDENCE,
-    STAGE_COLLECTING_EVIDENCE: STAGE_ANALYZING_RESULT,
-    STAGE_ANALYZING_RESULT: STAGE_UPDATING_KNOWLEDGE,
-    STAGE_UPDATING_KNOWLEDGE: STAGE_EVALUATING_PROGRESS,
-    STAGE_EVALUATING_PROGRESS: STAGE_DECIDING_NEXT_ACTION,
-    STAGE_DECIDING_NEXT_ACTION: STAGE_GENERATING_CANDIDATES,
-}
-
-
-def next_stage(stage: str) -> str:
-    return _NEXT_STAGE.get(stage, STAGE_IDLE)
-
-
 # How a candidate is integrated — the Knowledge Manager's decision, surfaced.
 DISPOSITION_NEW = "NEW"
 DISPOSITION_UPDATE = "UPDATE"
@@ -329,7 +306,6 @@ class ResearchCandidate:
     objective: str = ""
     expected_information_gain: str = "medium"  # low | medium | high
     priority_hint: str = "medium"
-    dependencies: list[str] = field(default_factory=list)
     estimated_cost: str = "medium"  # low | medium | high
     risk: str = "low"
     related_knowledge: list[str] = field(default_factory=list)

@@ -153,7 +153,3 @@ def serialize_error(exc: BaseException) -> dict[str, Any]:
     """A compact, JSON-safe error record for the job's `last_error`."""
     cls, kind, msg = classify_error(exc)
     return {"class": cls, "kind": kind or exc.__class__.__name__, "message": msg[:500], "retryable": cls != S.NON_RETRYABLE}
-
-
-def register_strategy(name: str, strategy: BackoffStrategy) -> None:
-    RETRY_POLICY_REGISTRY.register(name, strategy)

@@ -141,8 +141,3 @@ class ResourceManager:
             "agents": self._agents,
             "maxAgents": self.limits.max_concurrent_agents,
         }
-
-
-def backpressure_exceeded(queue_depth: int, limits: ResourceLimits) -> bool:
-    """Whether the queue is too deep to admit more work (spec §55)."""
-    return queue_depth >= limits.max_queue_depth

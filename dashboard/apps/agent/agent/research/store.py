@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,16 @@ from . import models as M
 from .events import ResearchEvent
 
 log = logging.getLogger("agent.research.store")
+
+
+def _table_of(sql: str) -> str:
+    """The table a `SELECT … FROM <table> …` reads, for `_decode`'s column rules.
+
+    Matches the first `FROM` that is followed by a plain identifier, so a
+    subquery (`FROM (SELECT …)`), a starred or bracketed source does not yield a
+    bogus table name the way `sql.split("FROM")[1].split()[0]` did."""
+    m = re.search(r"\bFROM\s+([A-Za-z_][A-Za-z0-9_]*)", sql, re.IGNORECASE)
+    return m.group(1) if m else ""
 
 
 def _append_line(path: Path, line: str) -> None:
@@ -316,7 +327,7 @@ _JSON_COLS = {
     "research_runs": {"objective", "budget", "progress", "metadata"},
     "research_iterations": {"knowledge_updates", "evaluation"},
     "research_candidates": {
-        "dependencies", "related_knowledge", "related_unknowns", "related_conflicts", "rank_inputs",
+        "related_knowledge", "related_unknowns", "related_conflicts", "rank_inputs",
     },
     "research_plans": {"steps", "expected_evidence", "success_conditions", "failure_conditions", "constraints"},
     "research_results": {
@@ -422,13 +433,13 @@ class ResearchStore:
         await self._conn.commit()
 
     async def _fetchone(self, sql: str, args: tuple = ()) -> dict | None:
-        table = sql.split("FROM", 1)[1].split()[0]
+        table = _table_of(sql)
         cur = await self._conn.execute(sql, args)
         row = await cur.fetchone()
         return self._decode(table, row)
 
     async def _fetchall(self, sql: str, args: tuple = ()) -> list[dict]:
-        table = sql.split("FROM", 1)[1].split()[0]
+        table = _table_of(sql)
         cur = await self._conn.execute(sql, args)
         rows = await cur.fetchall()
         return [d for d in (self._decode(table, r) for r in rows) if d is not None]

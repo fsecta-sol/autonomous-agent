@@ -132,18 +132,6 @@ def read(rel: str) -> tuple[Note, str]:
     return Note(path=str(path), raw=raw), file_hash(raw_bytes)
 
 
-def read_by_slug(slug: str) -> tuple[Note, str] | None:
-    """Find a note by slug across the concept and project folders."""
-    for rel in (f"03-Areas/concepts/{slug}.md", f"02-Projects/{slug}.md"):
-        try:
-            p = _read_path(rel, must_exist=False)
-        except VaultError:
-            continue
-        if p.exists():
-            return read(rel)
-    return None
-
-
 def exists(rel: str) -> bool:
     try:
         return _read_path(rel, must_exist=False).exists()

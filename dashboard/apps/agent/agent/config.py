@@ -49,10 +49,6 @@ def agent_port() -> int:
         return 8012
 
 
-def terminal_allow_unsandboxed() -> bool:
-    return os.environ.get("TERMINAL_ALLOW_UNSANDBOXED") == "1"
-
-
 def scratch_dir() -> Path:
     """Per-agent writable scratch root for the terminal tool's work dirs."""
     default = Path(__file__).resolve().parent.parent / "data" / "terminal"

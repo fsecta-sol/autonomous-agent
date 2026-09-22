@@ -8,6 +8,8 @@ return. They are grouped by the bug they lock down:
   - scheduler durability   (S1: backpressure counts terminal jobs; S2: lease TOCTOU)
   - loop termination       (contradiction alone must not reset the low-value streak)
   - chat reliability       (C1/C2: retry middleware must be transient-only + raise)
+  - small audit items      (R7 missing-result kind; R9 unknowns_resolved;
+                            terminal killpg; store subquery-safe table parsing)
 
     cd apps/agent && .venv/bin/python -m unittest tests.test_audit_fixes -v
 """
@@ -23,6 +25,8 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from tests.test_research_loop import ResearchTestCase  # noqa: E402
 
 
 # ── candidate hygiene (D1 / R1) ──────────────────────────────────────────────
@@ -259,6 +263,144 @@ class TestCandidateStoreHelpers(StoreTestCase):
         self.assertTrue(await store.get_candidate("dup"))
         self.assertEqual((await store.get_candidate("dup")).status, "abandoned")
         self.assertEqual((await store.get_candidate("c2")).status, "open")
+
+
+# ── small audit items (R7 / R9 / terminal / store) ───────────────────────────
+
+class TestMissingResultKind(ResearchTestCase):
+    async def test_missing_result_is_marked_transient(self):
+        """`_stage_analyze_result` with no stored result must build a *transient*
+        failure (FAIL_TOOL). FAIL_NONE made nextaction read it as non-transient and
+        CONTINUE, dropping the iteration as if it had succeeded."""
+        from agent.research import models as M
+
+        _store, _deps, loop = await self._make()
+        run = await loop.start({"objective": "Understand MEV extraction and its preconditions"})
+        # force the missing-result branch: a result id that resolves to nothing
+        run.metadata["current_result_id"] = "res_missing"
+        await loop._stage_analyze_result(run)
+        ev = M.Evaluation.from_dict(run.metadata.get("evaluation", {}))
+        self.assertTrue(ev.failed)
+        self.assertIn(ev.failure_kind, (M.FAIL_TOOL, M.FAIL_SOURCE_UNAVAILABLE, M.FAIL_TIMEOUT),
+                      "a missing result must be a transient failure kind")
+
+
+class TestUnknownsResolvedNotVerified(unittest.TestCase):
+    def test_verified_is_not_counted_as_resolved(self):
+        from agent.research.progress import ProgressEvaluator
+        from agent.research import models as M
+
+        pe = ProgressEvaluator()
+        progress = M.Progress()
+        pe.apply(progress, M.Evaluation(new_evidence=True), updates=[{"op": "verified"}])
+        self.assertEqual(progress.unknowns_resolved, 0, "a verified node is not a resolved unknown")
+        pe.apply(progress, M.Evaluation(), updates=[{"op": "resolved"}])
+        self.assertEqual(progress.unknowns_resolved, 1, "a real resolution is counted")
+
+
+class TestTerminalKillsProcessGroup(unittest.TestCase):
+    @staticmethod
+    def _live_members(pgid: int) -> list[str]:
+        # states R/S/D mean actually alive; Z (zombie) is already dead and reaped
+        # asynchronously, so a lingering zombie is not a leak.
+        out = []
+        for p in os.listdir("/proc"):
+            if not p.isdigit():
+                continue
+            try:
+                with open(f"/proc/{p}/stat") as fh:
+                    raw = fh.read()
+            except Exception:
+                continue
+            # the comm field is parenthesised and may contain spaces/parens; parse
+            # the fields after its final ')' — state, ppid, pgrp — robustly.
+            rest = raw[raw.rfind(")") + 2:].split()
+            if len(rest) >= 3 and int(rest[2]) == pgid and rest[0] in ("R", "S", "D"):
+                out.append(p)
+        return out
+
+    def test_backgrounded_grandchild_is_killed_on_timeout(self):
+        """A timed-out command must be bounded by its timeout. The backgrounded
+        grandchild inherits the stdout/stderr pipes, so `proc.kill()` (child only)
+        left `communicate()` blocked until the grandchild exited on its own — the
+        timeout stopped bounding the call. A whole-group kill returns promptly."""
+        import subprocess
+        import time
+        from agent.tools import terminal as T
+
+        # grandchild lives 5s: with killpg the call returns in ~1s; with the old
+        # proc.kill it blocks for the full 5s waiting on the inherited pipes.
+        proc = subprocess.Popen("sleep 5 & sleep 5", shell=True, start_new_session=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        t0 = time.monotonic()
+        out = T._collect(proc, timeout_s=1)
+        elapsed = time.monotonic() - t0
+        self.assertTrue(out["timedOut"])
+        self.assertLess(elapsed, 3.0,
+                        "the timed-out call kept running past its timeout (grandchild left alive)")
+        live: list[str] = []
+        for _ in range(20):
+            live = self._live_members(proc.pid)
+            if not live:
+                break
+            time.sleep(0.1)
+        self.assertEqual(live, [], "a backgrounded grandchild survived the timeout")
+
+
+# ── dead-code cleanup + wiring (R6) ──────────────────────────────────────────
+
+class TestShouldRetryHonored(unittest.TestCase):
+    def test_should_retry_flag_is_honored(self):
+        """R6: the analyzer's `Evaluation.should_retry` must be read by the next
+        action, not silently ignored. A failed eval whose kind is outside the
+        hardcoded transient set but that the analyzer flagged for retry must
+        RETRY; one that is not flagged and has a non-transient kind must NOT."""
+        from agent.research.nextaction import DefaultNextActionSelector
+        from agent.research import models as M
+
+        sel = DefaultNextActionSelector()
+        run = M.ResearchRun(id="r", objective=M.Objective(statement="o"))
+        flagged = M.Evaluation(failed=True, failure_kind=M.FAIL_NONE, should_retry=True)
+        a = sel.select(evaluation=flagged, stop=None, run=run, attempts_on_question=0,
+                       max_attempts=4, branch_depth=0, max_branch_depth=2)
+        self.assertEqual(a.action, M.ACTION_RETRY, "a flagged retry must be honoured")
+
+        not_flagged = M.Evaluation(failed=True, failure_kind=M.FAIL_NONE, should_retry=False)
+        b = sel.select(evaluation=not_flagged, stop=None, run=run, attempts_on_question=0,
+                       max_attempts=4, branch_depth=0, max_branch_depth=2)
+        self.assertEqual(b.action, M.ACTION_CONTINUE)
+
+
+class TestPrioritizerHasNoDeadSignal(unittest.TestCase):
+    def test_breakdown_excludes_dependency_impact(self):
+        """R5: `dependency_impact` was a dead term (candidates never populate
+        `dependencies`), so it must not appear in the score breakdown or weights."""
+        import asyncio
+        from agent.research.prioritizer import WeightedPrioritizer, Weights
+        from agent.research.context import ResearchContext
+        from agent.research import models as M
+
+        self.assertFalse(hasattr(Weights(), "dependency_impact"))
+        cand = M.ResearchCandidate(id="c1", question="What is MEV?")
+        ctx = ResearchContext(run_id="r", objective=M.Objective(statement="Understand MEV"), iteration=1)
+        ranked = asyncio.run(WeightedPrioritizer().rank([cand], ctx))
+        self.assertEqual(len(ranked), 1)
+        self.assertNotIn("dependency_impact", ranked[0].breakdown)
+
+
+class TestStoreTableParsing(StoreTestCase):
+    async def test_subquery_still_decodes_json_columns(self):
+        """`_decode` must resolve the real table through a subquery. The old
+        `sql.split('FROM')[1].split()[0]` yielded '(SELECT', so JSON columns stayed
+        raw strings instead of being parsed."""
+        from agent.research import models as M
+
+        store = await self._store()
+        await store.save_run(M.ResearchRun(id="run_x", objective=M.Objective(statement="decode me")))
+        rows = await store._fetchall("SELECT * FROM (SELECT * FROM research_runs) t")
+        self.assertEqual(len(rows), 1)
+        self.assertIsInstance(rows[0]["objective"], dict,
+                              "objective must be JSON-decoded, not left as a raw string")
 
 
 if __name__ == "__main__":

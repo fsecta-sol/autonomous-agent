@@ -80,7 +80,10 @@ class DefaultNextActionSelector(NextActionSelector):
         #    transient failures. A rejected hypothesis is not retried — it is a
         #    result (the branch/continue path handles it).
         if evaluation.failed:
-            transient = evaluation.failure_kind in (M.FAIL_TOOL, M.FAIL_SOURCE_UNAVAILABLE, M.FAIL_TIMEOUT)
+            # Honour the analyzer's retry classification (Evaluation.should_retry),
+            # falling back to the failure kind for evaluations built without it.
+            transient = evaluation.should_retry or evaluation.failure_kind in (
+                M.FAIL_TOOL, M.FAIL_SOURCE_UNAVAILABLE, M.FAIL_TIMEOUT)
             if transient and attempts_on_question < max_attempts:
                 return NextAction(M.ACTION_RETRY, f"{evaluation.failure_kind}, attempt {attempts_on_question + 1}/{max_attempts}")
             return NextAction(M.ACTION_CONTINUE, f"abandoning after {evaluation.failure_kind}")
